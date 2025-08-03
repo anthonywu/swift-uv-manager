@@ -3,7 +3,6 @@ import SwiftUI
 struct InstallToolView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var uvManager: UVManager
-    @StateObject private var processManager = ProcessManager()
     
     @State private var packageName = ""
     @State private var additionalPackages: [String] = []
@@ -32,7 +31,7 @@ struct InstallToolView: View {
         .frame(width: 600, height: 500)
         .background(Color(NSColor.windowBackgroundColor))
         .sheet(isPresented: $showTerminalOutput) {
-            TerminalOutputView(processManager: processManager)
+            TerminalOutputView(processManager: uvManager.processManager)
                 .frame(width: 700, height: 500)
         }
     }

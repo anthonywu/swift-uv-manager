@@ -128,17 +128,23 @@ struct ContentView: View {
             
             Divider()
             
-            // Footer with GitHub attribution
-            HStack {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    .font(.caption)
+            // Footer with version and GitHub attribution
+            VStack(spacing: 4) {
+                Text("\(AppConstants.appName) v\(AppConstants.version)")
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
-                Text("Created by")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Link("Anthony Wu", destination: URL(string: "https://github.com/anthonywu")!)
-                    .font(.caption)
-                    .foregroundStyle(.blue)
+                
+                HStack {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    Text("Created by")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link("Anthony Wu", destination: URL(string: AppConstants.githubURL)!)
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
             }
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)

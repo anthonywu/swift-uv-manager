@@ -39,7 +39,7 @@ By wrapping the powerful UV package manager in an intuitive GUI, UV Manager expa
 ## Requirements
 
 - macOS 14.0 or later
-- UV command-line tool (app will offer to install if missing)
+- UV command-line tool (app will offer to install if missing) - pending verification this works
 
 ## Building
 

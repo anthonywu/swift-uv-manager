@@ -5,7 +5,6 @@ struct BulkActionsView: View {
     @State private var showUpgradeAllAlert = false
     @State private var isPerformingAction = false
     @State private var showTerminalOutput = false
-    @StateObject private var processManager = ProcessManager()
     
     var body: some View {
         HStack(spacing: 16) {
@@ -37,7 +36,7 @@ struct BulkActionsView: View {
             Text("Are you sure you want to upgrade all \(uvManager.tools.count) tools? This may take several minutes and could potentially introduce breaking changes.")
         }
         .sheet(isPresented: $showTerminalOutput) {
-            TerminalOutputView(processManager: processManager)
+            TerminalOutputView(processManager: uvManager.processManager)
                 .frame(width: 700, height: 500)
         }
     }

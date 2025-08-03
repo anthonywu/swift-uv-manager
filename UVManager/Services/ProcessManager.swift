@@ -47,7 +47,8 @@ class ProcessManager: ObservableObject {
                     let data = handle.availableData
                     if !data.isEmpty, let string = String(data: data, encoding: .utf8) {
                         Task { @MainActor in
-                            self?.error += string
+                            // UV outputs progress to stderr, so we'll treat it as normal output
+                            self?.output += string
                         }
                     }
                 }
@@ -67,11 +68,15 @@ class ProcessManager: ObservableObject {
                 
                 Task { @MainActor in
                     if streamOutput {
-                        self?.output += outputString
-                        self?.error += errorString
+                        // Append any remaining output
+                        if !outputString.isEmpty {
+                            self?.output += outputString
+                        }
+                        if !errorString.isEmpty {
+                            self?.output += errorString  // UV uses stderr for progress
+                        }
                     } else {
-                        self?.output = outputString
-                        self?.error = errorString
+                        self?.output = outputString + errorString
                     }
                     self?.isRunning = false
                 }

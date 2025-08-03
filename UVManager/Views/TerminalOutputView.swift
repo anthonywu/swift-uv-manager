@@ -33,17 +33,30 @@ struct TerminalOutputView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
+                        if processManager.output.isEmpty && processManager.error.isEmpty {
+                            if processManager.isRunning {
+                                HStack {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .scaleEffect(0.8)
+                                    Text("Waiting for output...")
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundStyle(.gray)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 20)
+                            } else {
+                                Text("No output")
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.vertical, 20)
+                            }
+                        }
+                        
                         if !processManager.output.isEmpty {
                             Text(processManager.output)
                                 .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        
-                        if !processManager.error.isEmpty {
-                            Text(processManager.error)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(.red)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -54,8 +67,8 @@ struct TerminalOutputView: View {
                     }
                     .padding()
                 }
-                .background(Color.black.opacity(0.9))
-                .foregroundStyle(.white)
+                .background(Color(NSColor.textBackgroundColor))
+                .foregroundStyle(Color(NSColor.labelColor))
                 .onChange(of: processManager.output) { oldValue, newValue in
                     withAnimation {
                         proxy.scrollTo("bottom", anchor: .bottom)

@@ -221,6 +221,9 @@ class UVManager: ObservableObject {
             args.append("--force")
         }
         
+        // Add verbose flag to get more output
+        args.append("-v")
+        
         _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
         await fetchTools()
     }
@@ -230,7 +233,7 @@ class UVManager: ObservableObject {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", name], streamOutput: true)
+        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", name, "-v"], streamOutput: true)
         await fetchTools()
     }
     
@@ -239,7 +242,7 @@ class UVManager: ObservableObject {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", "--all"], streamOutput: true)
+        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", "--all", "-v"], streamOutput: true)
         await fetchTools()
     }
     
@@ -248,7 +251,7 @@ class UVManager: ObservableObject {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name], streamOutput: true)
+        _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name, "-v"], streamOutput: true)
         await fetchTools()
     }
     

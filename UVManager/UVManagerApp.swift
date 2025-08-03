@@ -33,9 +33,9 @@ struct UVManagerApp: App {
                 Button("About UV Manager") {
                     NSApp.orderFrontStandardAboutPanel(
                         options: [
-                            .applicationName: "UV Manager",
+                            .applicationName: AppConstants.appName,
                             .applicationIcon: NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: "UV Manager Icon") as Any,
-                            .applicationVersion: "1.0.0",
+                            .applicationVersion: AppConstants.version,
                             .credits: NSAttributedString(string: "A beautiful macOS interface for Python tool management via UV\n\n© 2025 Anthony Wu", attributes: [.font: NSFont.systemFont(ofSize: 11)])
                         ]
                     )

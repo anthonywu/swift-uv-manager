@@ -7,32 +7,44 @@ struct ToolDetailView: View {
     @State private var showUninstallAlert = false
     @State private var isPerformingAction = false
     
+    // Computed property to get the current tool data
+    private var currentTool: UVTool? {
+        uvManager.tools.first { $0.name == tool.name }
+    }
+    
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                headerSection
-                
-                if !tool.executables.isEmpty {
-                    executablesSection
+        Group {
+            if let currentTool = currentTool {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        headerSection
+                        
+                        if !currentTool.executables.isEmpty {
+                            executablesSection
+                        }
+                        
+                        if !currentTool.withPackages.isEmpty || !currentTool.extras.isEmpty {
+                            dependenciesSection
+                        }
+                        
+                        actionsSection
+                    }
+                    .padding()
                 }
-                
-                if !tool.withPackages.isEmpty || !tool.extras.isEmpty {
-                    dependenciesSection
-                }
-                
-                actionsSection
+                .navigationTitle(currentTool.name)
+                .navigationSubtitle("v\(currentTool.version)")
+            } else {
+                // Tool was uninstalled
+                EmptyStateView()
             }
-            .padding()
         }
-        .navigationTitle(tool.name)
-        .navigationSubtitle("v\(tool.version)")
         .alert("Upgrade Tool", isPresented: $showUpgradeAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Upgrade") {
                 Task {
                     isPerformingAction = true
                     do {
-                        try await uvManager.upgradeTool(name: tool.name)
+                        try await uvManager.upgradeTool(name: currentTool?.name ?? tool.name)
                     } catch {
                         print("Upgrade failed: \(error)")
                     }
@@ -40,7 +52,7 @@ struct ToolDetailView: View {
                 }
             }
         } message: {
-            Text("Are you sure you want to upgrade \(tool.name)? This will update to the latest version available on PyPI.")
+            Text("Are you sure you want to upgrade \(currentTool?.name ?? tool.name)? This will update to the latest version available on PyPI.")
         }
         .alert("Uninstall Tool", isPresented: $showUninstallAlert) {
             Button("Cancel", role: .cancel) { }
@@ -48,7 +60,7 @@ struct ToolDetailView: View {
                 Task {
                     isPerformingAction = true
                     do {
-                        try await uvManager.uninstallTool(name: tool.name)
+                        try await uvManager.uninstallTool(name: currentTool?.name ?? tool.name)
                     } catch {
                         print("Uninstall failed: \(error)")
                     }
@@ -56,126 +68,138 @@ struct ToolDetailView: View {
                 }
             }
         } message: {
-            Text("Are you sure you want to uninstall \(tool.name)? This will remove all executables and the tool's virtual environment.")
+            Text("Are you sure you want to uninstall \(currentTool?.name ?? tool.name)? This will remove all executables and the tool's virtual environment.")
         }
     }
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "shippingbox.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.blue)
-                
-                VStack(alignment: .leading) {
-                    Text(tool.name)
+        guard let currentTool = currentTool else { return AnyView(EmptyView()) }
+        
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "shippingbox.fill")
                         .font(.largeTitle)
-                        .fontWeight(.bold)
+                        .foregroundStyle(.blue)
                     
-                    Text("Version \(tool.version)")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-                
-                if let url = tool.pypiURL {
-                    Link(destination: url) {
-                        Label("View on PyPI", systemImage: "arrow.up.right.square")
+                    VStack(alignment: .leading) {
+                        Text(currentTool.name)
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        
+                        Text("Version \(currentTool.version)")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
+                    
+                    Spacer()
+                    
+                    if let url = currentTool.pypiURL {
+                        Link(destination: url) {
+                            Label("View on PyPI", systemImage: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
-            }
-            
-            if let specifier = tool.versionSpecifier {
+                
+                if let specifier = currentTool.versionSpecifier {
+                    Label {
+                        Text(specifier)
+                            .font(.callout)
+                    } icon: {
+                        Image(systemName: "pin.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                
                 Label {
-                    Text(specifier)
-                        .font(.callout)
+                    Text(currentTool.path)
+                        .font(.caption)
+                        .textSelection(.enabled)
                 } icon: {
-                    Image(systemName: "pin.fill")
-                        .foregroundStyle(.orange)
+                    Image(systemName: "folder")
                 }
             }
-            
-            Label {
-                Text(tool.path)
-                    .font(.caption)
-                    .textSelection(.enabled)
-            } icon: {
-                Image(systemName: "folder")
-            }
-        }
-        .padding()
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .padding()
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        )
     }
     
     private var executablesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Executables", systemImage: "terminal")
-                .font(.headline)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(tool.executables) { executable in
-                    HStack {
-                        Text(executable.name)
-                            .font(.system(.body, design: .monospaced))
-                            .fontWeight(.medium)
-                        
-                        Spacer()
-                        
-                        Text(executable.path)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+        guard let currentTool = currentTool else { return AnyView(EmptyView()) }
+        
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Executables", systemImage: "terminal")
+                    .font(.headline)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(currentTool.executables) { executable in
+                        HStack {
+                            Text(executable.name)
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.medium)
+                            
+                            Spacer()
+                            
+                            Text(executable.path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .padding(8)
+                        .background(.tertiary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .padding(8)
-                    .background(.tertiary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
-        }
+        )
     }
     
     private var dependenciesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Dependencies & Extras", systemImage: "link")
-                .font(.headline)
-            
-            if !tool.withPackages.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Additional Packages")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    FlowLayout(spacing: 8) {
-                        ForEach(tool.withPackages, id: \.self) { package in
-                            Text(package)
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(.green.opacity(0.2), in: Capsule())
+        guard let currentTool = currentTool else { return AnyView(EmptyView()) }
+        
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Dependencies & Extras", systemImage: "link")
+                    .font(.headline)
+                
+                if !currentTool.withPackages.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Additional Packages")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        FlowLayout(spacing: 8) {
+                            ForEach(currentTool.withPackages, id: \.self) { package in
+                                Text(package)
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(.green.opacity(0.2), in: Capsule())
+                            }
+                        }
+                    }
+                }
+                
+                if !currentTool.extras.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Extras")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        FlowLayout(spacing: 8) {
+                            ForEach(currentTool.extras, id: \.self) { extra in
+                                Text(extra)
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(.blue.opacity(0.2), in: Capsule())
+                            }
                         }
                     }
                 }
             }
-            
-            if !tool.extras.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Extras")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    FlowLayout(spacing: 8) {
-                        ForEach(tool.extras, id: \.self) { extra in
-                            Text(extra)
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(.blue.opacity(0.2), in: Capsule())
-                        }
-                    }
-                }
-            }
-        }
+        )
     }
     
     private var actionsSection: some View {
