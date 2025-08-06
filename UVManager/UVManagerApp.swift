@@ -41,6 +41,19 @@ struct UVManagerApp: App {
                     )
                 }
             }
+            
+            CommandGroup(after: .help) {
+                Link("UV Manager on GitHub", destination: URL(string: "https://github.com/anthonywu/swift-uv-manager")!)
+                    .keyboardShortcut("?", modifiers: .command)
+                
+                Divider()
+                
+                Button("Report an Issue") {
+                    if let url = URL(string: "https://github.com/anthonywu/swift-uv-manager/issues") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
         }
     }
 }

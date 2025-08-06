@@ -6,6 +6,15 @@ class ProcessManager: ObservableObject {
     @Published var output = ""
     @Published var error = ""
     
+    // For SwiftTerm integration
+    struct PendingCommand: Equatable {
+        let path: String
+        let arguments: [String]
+    }
+    
+    @Published var pendingCommand: PendingCommand?
+    @Published var lastCommand: PendingCommand?
+    
     private var process: Process?
     private var outputPipe: Pipe?
     private var errorPipe: Pipe?
@@ -101,6 +110,17 @@ class ProcessManager: ObservableObject {
     
     func cancel() {
         process?.terminate()
+    }
+    
+    // Method to run command in terminal emulator
+    func runInTerminal(_ command: String, arguments: [String]) {
+        Task { @MainActor in
+            self.isRunning = true
+            self.output = ""
+            self.error = ""
+            self.lastCommand = PendingCommand(path: command, arguments: arguments)
+            self.pendingCommand = PendingCommand(path: command, arguments: arguments)
+        }
     }
 }
 

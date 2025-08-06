@@ -12,11 +12,15 @@ let package = Package(
             targets: ["UVManager"]
         )
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0")
+    ],
     targets: [
         .executableTarget(
             name: "UVManager",
-            dependencies: [],
+            dependencies: [
+                .product(name: "SwiftTerm", package: "SwiftTerm")
+            ],
             path: "UVManager",
             resources: [
                 .process("Assets.xcassets"),

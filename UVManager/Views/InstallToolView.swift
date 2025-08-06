@@ -31,8 +31,11 @@ struct InstallToolView: View {
         .frame(width: 600, height: 500)
         .background(Color(NSColor.windowBackgroundColor))
         .sheet(isPresented: $showTerminalOutput) {
-            TerminalOutputView(processManager: uvManager.processManager)
-                .frame(width: 700, height: 500)
+            EnhancedTerminalView(processManager: uvManager.processManager) {
+                // Dismiss the install view when terminal is closed
+                dismiss()
+            }
+            .frame(width: 700, height: 500)
         }
     }
     
@@ -187,9 +190,8 @@ struct InstallToolView: View {
                     force: forceInstall
                 )
                 
-                await MainActor.run {
-                    dismiss()
-                }
+                // Don't dismiss immediately - let the user close the terminal
+                // The view will be dismissed when they close the terminal sheet
             } catch {
                 print("Installation failed: \(error)")
             }

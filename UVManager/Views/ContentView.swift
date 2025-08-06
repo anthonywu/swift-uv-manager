@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showInstallSheet = false
     @State private var showError = false
+    @State private var showUpdateTerminal = false
     
     var filteredTools: [UVTool] {
         if searchText.isEmpty {
@@ -18,7 +19,7 @@ struct ContentView: View {
     }
     
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             sidebar
         } detail: {
             if let tool = selectedTool {
@@ -27,9 +28,14 @@ struct ContentView: View {
                 EmptyStateView()
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, placement: .sidebar)
         .sheet(isPresented: $showInstallSheet) {
             InstallToolView()
+        }
+        .sheet(isPresented: $showUpdateTerminal) {
+            EnhancedTerminalView(processManager: uvManager.processManager)
+                .frame(width: 700, height: 500)
         }
         .alert("Error", isPresented: $showError, presenting: uvManager.lastError) { _ in
             Button("OK") { uvManager.lastError = nil }
@@ -56,9 +62,19 @@ struct ContentView: View {
                         }
                     }
                 } else if let installation = uvManager.selectedInstallation {
-                    Text("UV \(installation.version)")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text("UV \(installation.version)")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Button("Update uv") {
+                            showUpdateTerminal = true
+                            Task {
+                                await uvManager.selfUpdate()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
                 
                 Button {
@@ -89,6 +105,20 @@ struct ContentView: View {
                 if uvManager.installations.isEmpty {
                     NoUVInstalledView()
                 } else {
+                    if !uvManager.toolsDirectory.isEmpty {
+                        Section {
+                            Label {
+                                Text(uvManager.toolsDirectory)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
+                            } icon: {
+                                Image(systemName: "folder")
+                            }
+                        } header: {
+                            Text("Tools Directory")
+                        }
+                    }
+                    
                     Section {
                         ForEach(filteredTools) { tool in
                             ToolRowView(tool: tool)
@@ -108,20 +138,6 @@ struct ContentView: View {
                             BulkActionsView()
                         }
                     }
-                    
-                    if !uvManager.toolsDirectory.isEmpty {
-                        Section {
-                            Label {
-                                Text(uvManager.toolsDirectory)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
-                            } icon: {
-                                Image(systemName: "folder")
-                            }
-                        } header: {
-                            Text("Tools Directory")
-                        }
-                    }
                 }
             }
             .listStyle(.sidebar)
@@ -129,15 +145,12 @@ struct ContentView: View {
             Divider()
             
             // Footer with version and GitHub attribution
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 Text("\(AppConstants.appName) v\(AppConstants.version)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 
                 HStack {
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
                     Text("Created by")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -146,7 +159,7 @@ struct ContentView: View {
                         .foregroundStyle(.blue)
                 }
             }
-            .padding(.vertical, 8)
+            .padding(12)
             .frame(maxWidth: .infinity)
             .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
         }
@@ -158,13 +171,23 @@ struct ContentView: View {
 struct EmptyStateView: View {
     @State private var showInstallSheet = false
     
+    private let koans = [
+        "The fastest resolver\nstill waits for the slowest mirror.",
+        "In the virtual environment,\nwhich Python is real?",
+        "Dependencies resolved,\nhuman conflicts remain.",
+        "Empty requirements.txt,\ninfinite possibilities.",
+        "One tool to rule them all,\nstill needs updating."
+    ]
+    
+    @State private var selectedKoanIndex: Int = Int.random(in: 0..<5)
+    
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "shippingbox")
                 .font(.system(size: 60))
                 .foregroundStyle(.quaternary)
             
-            Text("Select a tool to view details")
+            Text("Select a tool from the sidebar to view details")
                 .font(.title2)
                 .foregroundStyle(.secondary)
             
@@ -177,6 +200,32 @@ struct EmptyStateView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            
+            Spacer()
+                .frame(height: 40)
+            
+            Divider()
+                .frame(width: 300)
+            
+            // Zen Koan - Click to rotate
+            Button(action: {
+                selectedKoanIndex = (selectedKoanIndex + 1) % koans.count
+            }) {
+                VStack(spacing: 8) {
+                    Text("\"\(koans[selectedKoanIndex])\"")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .italic()
+                        .padding(.horizontal, 30)
+                    
+                    Text("— Zen of UV Manager —")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Click to see next koan")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showInstallSheet) {

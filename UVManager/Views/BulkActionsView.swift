@@ -36,7 +36,7 @@ struct BulkActionsView: View {
             Text("Are you sure you want to upgrade all \(uvManager.tools.count) tools? This may take several minutes and could potentially introduce breaking changes.")
         }
         .sheet(isPresented: $showTerminalOutput) {
-            TerminalOutputView(processManager: uvManager.processManager)
+            EnhancedTerminalView(processManager: uvManager.processManager)
                 .frame(width: 700, height: 500)
         }
     }

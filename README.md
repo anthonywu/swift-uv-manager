@@ -2,6 +2,8 @@
 
 A macOS app that provides a beautiful SwiftUI interface for managing Python tools via Astral's excellent `uv` tool.
 
+![demo screenshot of install, package info, upgrade prompts](./docs/hero-screenshots.gif)
+
 ## Status
 
 Alpha release. It should mostly work and do no harm, however the community is invited to co-test this with me. Please file issues in the official repo
@@ -19,7 +21,7 @@ The Python ecosystem has created incredibly powerful command-line tools, but the
 ## Who This Helps
 
 - **Data Analysts & Scientists** who want to use tools like Jupyter, pandas utilities, or data converters without wrestling with package conflicts
-- **Business Users** who need Python-based reporting or automation tools but aren't comfortable with terminal commands  
+- **Business Users** who need Python-based reporting or automation tools but aren't comfortable with terminal commands
 - **Educators & Students** learning Python who can focus on using tools rather than managing installations
 - **Casual Hobbyists** exploring Python tools for personal projects without the overhead of learning package management
 - **Mac Users** who expect the polish and simplicity of native applications, not command-line interfaces

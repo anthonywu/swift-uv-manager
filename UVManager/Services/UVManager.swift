@@ -85,7 +85,7 @@ class UVManager: ObservableObject {
         guard let uvPath = selectedInstallation?.path else { return }
         
         do {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["tool", "dir"])
+            let (output, _) = try await processManager.run(uvPath, arguments: ["tool", "dir", "--color", "never"])
             toolsDirectory = output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             print("Failed to fetch tools directory: \(error)")
@@ -105,7 +105,8 @@ class UVManager: ObservableObject {
                 "--show-paths",
                 "--show-version-specifiers",
                 "--show-with",
-                "--show-extras"
+                "--show-extras",
+                "--color", "never"
             ])
             
             self.tools = parseToolsList(output)
@@ -205,7 +206,7 @@ class UVManager: ObservableObject {
         return tools
     }
     
-    func installTool(name: String, withPackages: [String] = [], force: Bool = false) async throws {
+    func installTool(name: String, withPackages: [String] = [], force: Bool = false, useTerminal: Bool = true) async throws {
         guard let uvPath = selectedInstallation?.path else {
             throw ProcessError.notFound
         }
@@ -223,27 +224,51 @@ class UVManager: ObservableObject {
         
         // Add verbose flag to get more output
         args.append("-v")
+        // Disable colors for better terminal compatibility
+        args.append("--color")
+        args.append("never")
         
-        _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-        await fetchTools()
+        if useTerminal {
+            // Use terminal emulator for better visual output
+            processManager.runInTerminal(uvPath, arguments: args)
+            // Don't auto-dismiss - let user close the terminal when ready
+            // We'll refresh tools when the terminal is closed
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchTools()
+        }
     }
     
-    func upgradeTool(name: String) async throws {
+    func upgradeTool(name: String, useTerminal: Bool = true) async throws {
         guard let uvPath = selectedInstallation?.path else {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", name, "-v"], streamOutput: true)
-        await fetchTools()
+        let args = ["tool", "upgrade", name, "-v", "--color", "never"]
+        
+        if useTerminal {
+            processManager.runInTerminal(uvPath, arguments: args)
+            // Don't auto-dismiss - let user close the terminal when ready
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchTools()
+        }
     }
     
-    func upgradeAllTools() async throws {
+    func upgradeAllTools(useTerminal: Bool = true) async throws {
         guard let uvPath = selectedInstallation?.path else {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "upgrade", "--all", "-v"], streamOutput: true)
-        await fetchTools()
+        let args = ["tool", "upgrade", "--all", "-v", "--color", "never"]
+        
+        if useTerminal {
+            processManager.runInTerminal(uvPath, arguments: args)
+            // Don't auto-dismiss - let user close the terminal when ready
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchTools()
+        }
     }
     
     func uninstallTool(name: String) async throws {
@@ -251,8 +276,21 @@ class UVManager: ObservableObject {
             throw ProcessError.notFound
         }
         
-        _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name, "-v"], streamOutput: true)
+        _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name, "-v", "--color", "never"], streamOutput: true)
         await fetchTools()
+    }
+    
+    func selfUpdate() async {
+        guard let uvPath = selectedInstallation?.path else {
+            lastError = "UV installation not found"
+            return
+        }
+        
+        // Run uv self update in terminal
+        processManager.runInTerminal(uvPath, arguments: ["self", "update", "--color", "never"])
+        
+        // After update completes, refresh UV installations
+        // This will be triggered when the terminal closes via onDisappear
     }
     
     func installUV() async throws {
