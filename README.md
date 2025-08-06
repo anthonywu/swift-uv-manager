@@ -8,7 +8,13 @@ A macOS app that provides a beautiful SwiftUI interface for managing Python tool
 
 Alpha release. It should mostly work and do no harm, however the community is invited to co-test this with me. Please file issues in the official repo
 
-I will post `UVManager.app` via GitHub releases, but until I register with Apple Developers Program (todo), you will need to override the Gatekeeper warning by `sudo xattr -rd com.apple.quarantine ~/Downloads/UVManager.app` (adjust path arg if you download to somewhere else)
+## Download
+
+In this repo's [Releases](https://github.com/anthonywu/swift-uv-manager/releases) page I will post `UV Manager.app` builds as a `.dmg` artifact.
+
+Open the `dmg` and drag the application icon to your `/Applications` folder.
+
+Until I register with Apple Developers Program (todo), you will need to override the Gatekeeper warning by `sudo xattr -rd com.apple.quarantine /Applications/UV\ Manager.app` (adjust path arg if you download to somewhere else)
 
 ## Why UV Manager Exists
 
