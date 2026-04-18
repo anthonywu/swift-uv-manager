@@ -11,6 +11,7 @@ RELEASE_DIR="${RELEASE_DIR:-release}"
 APP_PATH="$RELEASE_DIR/$APP_NAME.app"
 UPLOAD_ZIP_PATH="$RELEASE_DIR/$APP_NAME-upload.zip"
 FINAL_ZIP_PATH="$RELEASE_DIR/$APP_NAME.zip"
+FINAL_DMG_PATH=""  # set after version is read from Info.plist
 
 BUNDLE_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 DEVELOPER_ID_APP="${DEVELOPER_ID_APP:-}"
@@ -81,6 +82,7 @@ require_command ditto
 
 VERSION="$(plist_value CFBundleShortVersionString)"
 BUILD_NUMBER="$(plist_value CFBundleVersion)"
+FINAL_DMG_PATH="$RELEASE_DIR/$APP_NAME-$VERSION.dmg"
 
 echo "🔨 Building $APP_NAME $VERSION ($BUILD_NUMBER) for direct distribution..."
 
@@ -176,6 +178,11 @@ if [[ -n "$NOTARY_KEYCHAIN_PROFILE" ]] || [[ -n "$APPLE_ID" && -n "$TEAM_ID" && 
     package_zip "$FINAL_ZIP_PATH"
     rm -f "$UPLOAD_ZIP_PATH"
 
+    echo "💿 Creating DMG..."
+    rm -f "$FINAL_DMG_PATH"
+    hdiutil create -volname "$APP_NAME" -srcfolder "$APP_PATH" \
+        -ov -format UDZO "$FINAL_DMG_PATH"
+
     echo "✅ App notarized successfully"
 else
     echo "⚠️  Signing completed, but notarization was skipped."
@@ -188,6 +195,7 @@ echo ""
 echo "📍 Distribution files:"
 echo "   - App: $APP_PATH"
 echo "   - ZIP: $FINAL_ZIP_PATH"
+echo "   - DMG: $FINAL_DMG_PATH"
 echo ""
 echo "📏 App size: $(du -sh "$APP_PATH" | cut -f1)"
 echo ""
