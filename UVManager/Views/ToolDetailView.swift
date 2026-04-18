@@ -5,6 +5,7 @@ struct ToolDetailView: View {
     @EnvironmentObject var uvManager: UVManager
     @State private var showUpgradeAlert = false
     @State private var showUninstallAlert = false
+    @State private var showTerminalOutput = false
     @State private var isPerformingAction = false
     
     // Computed property to get the current tool data
@@ -41,6 +42,7 @@ struct ToolDetailView: View {
         .alert("Upgrade Tool", isPresented: $showUpgradeAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Upgrade") {
+                showTerminalOutput = true
                 Task {
                     isPerformingAction = true
                     do {
@@ -53,6 +55,10 @@ struct ToolDetailView: View {
             }
         } message: {
             Text("Are you sure you want to upgrade \(currentTool?.name ?? tool.name)? This will update to the latest version available on PyPI.")
+        }
+        .sheet(isPresented: $showTerminalOutput) {
+            EnhancedTerminalView(processManager: uvManager.processManager)
+                .frame(width: 700, height: 500)
         }
         .alert("Uninstall Tool", isPresented: $showUninstallAlert) {
             Button("Cancel", role: .cancel) { }

@@ -13,7 +13,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0")
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.13.0")
     ],
     targets: [
         .executableTarget(

@@ -3,15 +3,14 @@ import SwiftUI
 @main
 struct UVManagerApp: App {
     @StateObject private var uvManager = UVManager()
-    
+
     init() {
-        // Ensure the app activates properly
+        // Ensure the app appears in Cmd-Tab and Dock immediately
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp?.setActivationPolicy(.regular)
         }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -36,18 +35,18 @@ struct UVManagerApp: App {
                             .applicationName: AppConstants.appName,
                             .applicationIcon: NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: "UV Manager Icon") as Any,
                             .applicationVersion: AppConstants.version,
-                            .credits: NSAttributedString(string: "A beautiful macOS interface for Python tool management via UV\n\n© 2025 Anthony Wu", attributes: [.font: NSFont.systemFont(ofSize: 11)])
+                            .credits: NSAttributedString(string: "A beautiful macOS interface for Python tool management via UV\n\n© 2026 Anthony Wu", attributes: [.font: NSFont.systemFont(ofSize: 11)])
                         ]
                     )
                 }
             }
-            
+
             CommandGroup(after: .help) {
                 Link("UV Manager on GitHub", destination: URL(string: "https://github.com/anthonywu/swift-uv-manager")!)
                     .keyboardShortcut("?", modifiers: .command)
-                
+
                 Divider()
-                
+
                 Button("Report an Issue") {
                     if let url = URL(string: "https://github.com/anthonywu/swift-uv-manager/issues") {
                         NSWorkspace.shared.open(url)

@@ -10,11 +10,20 @@ Alpha release. It should mostly work and do no harm, however the community is in
 
 ## Download
 
-In this repo's [Releases](https://github.com/anthonywu/swift-uv-manager/releases) page I will post `UV Manager.app` builds as a `.dmg` artifact.
+In this repo's [Releases](https://github.com/anthonywu/swift-uv-manager/releases) page I will post notarized direct-download builds as a `.zip` artifact.
 
-Open the `dmg` and drag the application icon to your `/Applications` folder.
+Unzip the download and move `UV Manager.app` to your `/Applications` folder. The release process below signs the app with a `Developer ID Application` certificate, submits it for notarization, and staples the notarization ticket so users do not need to disable Gatekeeper or strip the quarantine attribute manually.
 
-Until I register with Apple Developers Program (todo), you will need to override the Gatekeeper warning by `sudo xattr -rd com.apple.quarantine /Applications/UV\ Manager.app` (adjust path arg if you download to somewhere else)
+## What Users Should Expect
+
+- Download `UV Manager.zip`, unzip it, move `UV Manager.app` to `/Applications`, and open it normally.
+- macOS may still show the standard first-launch confirmation for apps downloaded from the internet. This is expected.
+- Users should not need to disable Gatekeeper, remove the quarantine attribute manually, or use Terminal just to launch the app.
+- On first launch, the app may take a moment while it checks for an existing `uv` installation.
+- If `uv` is not installed, the app may offer to install it.
+- Installing, upgrading, or removing tools requires network access and may take some time depending on package size and connection speed.
+- Tool installs are intended to be user-level operations and should not normally require administrator access.
+- This is still an alpha release, so users should expect some rough edges and should report issues if installs, upgrades, or tool detection behave unexpectedly.
 
 ## Why UV Manager Exists
 
@@ -48,12 +57,71 @@ By wrapping the powerful UV package manager in an intuitive GUI, UV Manager expa
 
 - macOS 14.0 or later
 - UV command-line tool (app will offer to install if missing) - pending verification this works
+- Xcode with the Metal Toolchain component installed for release builds
 
 ## Building
 
-1. Open `UVManager.xcodeproj` in Xcode
-2. Select your development team in project settings
-3. Build and run (⌘R)
+1. Open the package in Xcode
+2. Build and run (`⌘R`)
+
+## Direct Distribution Release Setup
+
+These are the one-time local setup steps for producing a signed and notarized direct-download release outside the Mac App Store.
+
+1. Create a `Developer ID Application` certificate in Apple Developer.
+2. Generate the CSR on this Mac in `Keychain Access > Certificate Assistant > Request a Certificate From a Certificate Authority...`.
+3. Download the issued `.cer` file from Apple and add it to the `login` keychain.
+4. Confirm the signing identity is available locally:
+
+```bash
+security find-identity -v -p codesigning | rg 'Developer ID Application|TEAMID'
+```
+
+5. Install the Xcode Metal Toolchain component:
+
+```bash
+xcodebuild -downloadComponent MetalToolchain
+xcodebuild -showComponent MetalToolchain -json
+```
+
+6. Create an Apple app-specific password at [account.apple.com](https://account.apple.com).
+7. Store notarization credentials in the local keychain:
+
+```bash
+xcrun notarytool store-credentials YOUR_NOTARY_PROFILE \
+  --apple-id "YOUR_APPLE_ID" \
+  --team-id "YOUR_TEAM_ID" \
+  --password "YOUR_APP_SPECIFIC_PASSWORD"
+```
+
+8. Verify the notarization profile works:
+
+```bash
+xcrun notarytool history --keychain-profile YOUR_NOTARY_PROFILE
+```
+
+## Build And Notarize A Release
+
+Run the release script with the local signing identity and stored notarization profile:
+
+```bash
+DEVELOPER_ID_APP='Developer ID Application: Your Name (TEAMID)' \
+NOTARY_KEYCHAIN_PROFILE=YOUR_NOTARY_PROFILE \
+./build_release.sh
+```
+
+The script will:
+
+- build a universal Release app
+- sign the app with the `Developer ID Application` certificate
+- submit the ZIP archive for notarization with `notarytool`
+- staple the notarization ticket to the app
+- rebuild the final ZIP for distribution
+
+Artifacts are written to:
+
+- `release/UV Manager.app`
+- `release/UV Manager.zip`
 
 ## Architecture
 

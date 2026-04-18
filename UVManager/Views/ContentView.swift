@@ -150,14 +150,9 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 
-                HStack {
-                    Text("Created by")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Link("Anthony Wu", destination: URL(string: AppConstants.githubURL)!)
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                }
+                Link("Project on GitHub", destination: URL(string: AppConstants.githubURL)!)
+                    .font(.caption)
+                    .foregroundStyle(.blue)
             }
             .padding(12)
             .frame(maxWidth: .infinity)
