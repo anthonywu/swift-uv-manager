@@ -5,10 +5,9 @@ struct UVManagerApp: App {
     @StateObject private var uvManager = UVManager()
 
     init() {
-        // Ensure the app activates properly
+        // Ensure the app appears in Cmd-Tab and Dock immediately
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp?.setActivationPolicy(.regular)
         }
     }
 
