@@ -22,13 +22,22 @@ struct UVTool: Identifiable, Hashable {
 }
 
 struct UVInstallation: Identifiable, Hashable {
-    let id = UUID()
     let path: String
     let version: String
     let versionDate: String?
     
+    var id: String { path }
+    
     var displayName: String {
         "\(version) - \(path)"
+    }
+    
+    static func == (lhs: UVInstallation, rhs: UVInstallation) -> Bool {
+        lhs.path == rhs.path
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(path)
     }
     
     static func parse(from versionOutput: String) -> (version: String, date: String?)? {
