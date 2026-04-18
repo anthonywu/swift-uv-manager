@@ -20,13 +20,18 @@ APPLE_ID="${APPLE_ID:-}"
 TEAM_ID="${TEAM_ID:-}"
 APP_SPECIFIC_PASSWORD="${APP_SPECIFIC_PASSWORD:-}"
 
-if [[ -z "$DEVELOPER_ID_APP" ]]; then
+LOCAL_BUILD=false
+if [[ "${1:-}" == "--local" ]]; then
+    LOCAL_BUILD=true
+fi
+
+if [[ "$LOCAL_BUILD" == false ]] && [[ -z "$DEVELOPER_ID_APP" ]]; then
     echo "❌ DEVELOPER_ID_APP is required. Example:"
     echo "   export DEVELOPER_ID_APP='Developer ID Application: Your Name (TEAMID)'"
     exit 1
 fi
 
-if [[ -z "$NOTARY_KEYCHAIN_PROFILE" && ( -z "$APPLE_ID" || -z "$TEAM_ID" || -z "$APP_SPECIFIC_PASSWORD" ) ]]; then
+if [[ "$LOCAL_BUILD" == false ]] && [[ -z "$NOTARY_KEYCHAIN_PROFILE" && ( -z "$APPLE_ID" || -z "$TEAM_ID" || -z "$APP_SPECIFIC_PASSWORD" ) ]]; then
     echo "❌ Notarization credentials required. Set one of:"
     echo "   export NOTARY_KEYCHAIN_PROFILE=<stored profile>"
     echo "   or export APPLE_ID, TEAM_ID, and APP_SPECIFIC_PASSWORD"
@@ -139,6 +144,16 @@ if [[ -f "$ICON_SOURCE" ]]; then
     echo "✅ App icon bundled"
 else
     echo "⚠️  Icon source not found at $ICON_SOURCE. Finder will use a generic icon."
+fi
+
+if [[ "$LOCAL_BUILD" == true ]]; then
+    echo ""
+    echo "📍 Local build complete (unsigned):"
+    echo "   - App: $APP_PATH"
+    echo ""
+    echo "📏 App size: $(du -sh "$APP_PATH" | cut -f1)"
+    echo "💡 Run: open \"$APP_PATH\""
+    exit 0
 fi
 
 if [[ -n "$DEVELOPER_ID_APP" ]]; then
