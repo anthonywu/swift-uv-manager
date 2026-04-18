@@ -24,6 +24,7 @@ class UVManager: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
+        let selectedPath = selectedInstallation?.path
         var detectedInstallations: [UVInstallation] = []
         
         // Common UV installation locations
@@ -70,13 +71,23 @@ class UVManager: ObservableObject {
             // This is expected on some systems, ignore silently
         }
         
-        self.installations = detectedInstallations.sorted { v1, v2 in
+        let refreshedInstallations = detectedInstallations.sorted { v1, v2 in
             v1.version.compare(v2.version, options: .numeric) == .orderedDescending
         }
         
-        if !installations.isEmpty && selectedInstallation == nil {
-            selectedInstallation = installations.first
-        } else if installations.isEmpty {
+        self.installations = refreshedInstallations
+        
+        if let selectedPath,
+           let refreshedSelection = refreshedInstallations.first(where: { $0.path == selectedPath }) {
+            selectedInstallation = refreshedSelection
+            lastError = nil
+        } else if let firstInstallation = refreshedInstallations.first {
+            selectedInstallation = firstInstallation
+            lastError = nil
+        } else {
+            selectedInstallation = nil
+            toolsDirectory = ""
+            tools = []
             lastError = "UV not found. Please install UV first."
         }
     }
