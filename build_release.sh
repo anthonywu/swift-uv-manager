@@ -117,13 +117,14 @@ if [[ -f "$ICON_SOURCE" ]]; then
     rm -rf "$ICONSET_DIR"
     mkdir -p "$ICONSET_DIR"
     TRIMMED_ICON="$BUILD_DIR/icon_trimmed.png"
-    CROPPED_ICON="$BUILD_DIR/icon_cropped.png"
-    ICON_MASK="$BUILD_DIR/icon_mask.png"
-    # Crop to content, apply rounded-rect mask for transparent corners
-    magick "$ICON_SOURCE" -gravity center -crop 840x840+0+0 +repage "$CROPPED_ICON"
-    magick -size 840x840 xc:black -fill white -draw "roundrectangle 0,0 839,839 157,157" "$ICON_MASK"
-    magick composite "$ICON_MASK" "$CROPPED_ICON" -compose CopyOpacity "$TRIMMED_ICON"
-    magick "$TRIMMED_ICON" -background none -gravity center -extent 1024x1024 "$TRIMMED_ICON"
+    # Crop to content center, flood-fill checkerboard corners with transparency
+    magick "$ICON_SOURCE" -gravity center -crop 840x840+2-14 +repage \
+        -alpha set -fill none -fuzz 25% \
+        -draw "color 0,0 floodfill" \
+        -draw "color 839,0 floodfill" \
+        -draw "color 0,839 floodfill" \
+        -draw "color 839,839 floodfill" \
+        "$TRIMMED_ICON"
     for size in 16 32 64 128 256 512; do
         sips -z $size $size "$TRIMMED_ICON" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
     done
