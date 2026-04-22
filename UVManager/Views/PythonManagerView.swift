@@ -10,10 +10,17 @@ struct PythonManagerView: View {
 
     private var installedRuntimes: [UVPythonRuntime] {
         filtered(uvManager.pythonRuntimes.filter { $0.isInstalled && $0.isUvManaged })
+            .sorted { lhs, rhs in
+                if lhs.isDefault != rhs.isDefault {
+                    return lhs.isDefault
+                }
+
+                return lhs.version.compare(rhs.version, options: .numeric) == .orderedDescending
+            }
     }
 
     private var systemRuntimes: [UVPythonRuntime] {
-        filtered(uvManager.pythonRuntimes.filter { $0.isInstalled && $0.isFrameworkPython })
+        filtered(uvManager.pythonRuntimes.filter { $0.isInstalled && $0.isSystemPython })
     }
 
     private var downloadableRuntimes: [UVPythonRuntime] {
@@ -35,7 +42,7 @@ struct PythonManagerView: View {
                         runtimeSection(
                             title: "System Python",
                             runtimes: systemRuntimes,
-                            emptyMessage: searchText.isEmpty ? "No framework Python installs found." : "No matching framework Python installs.",
+                            emptyMessage: searchText.isEmpty ? "No system Python installs found." : "No matching system Python installs.",
                             footer: "These Python installs are outside uv's managed runtime directory and should not be managed by uv."
                         )
 
@@ -221,6 +228,10 @@ private struct PythonRuntimeRow: View {
                         PythonRuntimeBadge(text: "Free-threaded", color: .purple)
                     }
 
+                    if runtime.isDefault {
+                        PythonRuntimeBadge(text: "Default", color: .green)
+                    }
+
                     if runtime.isEndOfLife {
                         Link(destination: URL(string: "https://devguide.python.org/versions/")!) {
                             PythonRuntimeBadge(text: "End-of-Life", color: .red)
@@ -311,7 +322,7 @@ private extension UVPythonRuntime {
             return .green
         }
 
-        if isFrameworkPython {
+        if isSystemPython {
             return .blue
         }
 

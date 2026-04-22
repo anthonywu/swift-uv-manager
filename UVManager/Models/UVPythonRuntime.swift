@@ -6,6 +6,8 @@ struct UVPythonRuntime: Identifiable, Hashable {
     let version: String
     let platform: String
     let isFreethreaded: Bool
+    let managedInstallDirectory: String?
+    let defaultInterpreterPath: String?
     var entries: [Entry]
 
     var id: String { target }
@@ -44,12 +46,28 @@ struct UVPythonRuntime: Identifiable, Hashable {
         !installedEntries.isEmpty
     }
 
+    var isDefault: Bool {
+        guard let defaultInterpreterPath else { return false }
+        return installedEntries.contains { entry in
+            entry.executablePath.expandedHomePath == defaultInterpreterPath
+        }
+    }
+
     var isUvManaged: Bool {
-        installedLocations.contains { $0.contains("/.local/share/uv/python/") }
+        guard let managedInstallDirectory else { return false }
+        return installedLocations.contains { location in
+            location.expandedHomePath.hasPathPrefix(managedInstallDirectory)
+        }
     }
 
     var isFrameworkPython: Bool {
         installedLocations.contains { $0.contains("/Library/Frameworks/Python.framework/") }
+    }
+
+    var isSystemPython: Bool {
+        isFrameworkPython || installedLocations.contains { location in
+            location.expandedHomePath == "/usr/bin/python3"
+        }
     }
 
     var installSourceLabel: String {
@@ -57,7 +75,7 @@ struct UVPythonRuntime: Identifiable, Hashable {
             return "uv-managed"
         }
 
-        if isFrameworkPython {
+        if isSystemPython {
             return "System Python"
         }
 
@@ -117,9 +135,15 @@ struct UVPythonRuntime: Identifiable, Hashable {
         }
     }
 
-    static func parseList(_ output: String) -> [UVPythonRuntime] {
+    static func parseList(
+        _ output: String,
+        managedInstallDirectory: String? = nil,
+        defaultInterpreterPath: String? = nil
+    ) -> [UVPythonRuntime] {
         var runtimesByTarget: [String: UVPythonRuntime] = [:]
         var targetOrder: [String] = []
+        let normalizedManagedInstallDirectory = managedInstallDirectory?.expandedHomePath.trimmingTrailingSlashes()
+        let normalizedDefaultInterpreterPath = defaultInterpreterPath?.expandedHomePath
 
         for rawLine in output.components(separatedBy: .newlines) {
             let line = rawLine.strippingANSI().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -145,6 +169,8 @@ struct UVPythonRuntime: Identifiable, Hashable {
                     version: metadata.version,
                     platform: metadata.platform,
                     isFreethreaded: metadata.isFreethreaded,
+                    managedInstallDirectory: normalizedManagedInstallDirectory,
+                    defaultInterpreterPath: normalizedDefaultInterpreterPath,
                     entries: []
                 )
                 targetOrder.append(target)
@@ -174,5 +200,23 @@ private extension String {
     func strippingANSI() -> String {
         let pattern = "\u{001B}\\[[0-?]*[ -/]*[@-~]"
         return replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+    }
+
+    var expandedHomePath: String {
+        NSString(string: self).expandingTildeInPath.trimmingTrailingSlashes()
+    }
+
+    func trimmingTrailingSlashes() -> String {
+        var result = self
+        while result.count > 1 && result.hasSuffix("/") {
+            result.removeLast()
+        }
+        return result
+    }
+
+    func hasPathPrefix(_ prefix: String) -> Bool {
+        let normalizedSelf = expandedHomePath
+        let normalizedPrefix = prefix.expandedHomePath
+        return normalizedSelf == normalizedPrefix || normalizedSelf.hasPrefix(normalizedPrefix + "/")
     }
 }

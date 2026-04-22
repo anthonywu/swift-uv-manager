@@ -33,7 +33,7 @@ struct PythonInstallView: View {
     }
 
     private var commandTarget: String {
-        if upgradeExisting, let upgradeTarget = selectedRuntime?.upgradeTarget {
+        if canUpgradeExisting && upgradeExisting, let upgradeTarget = selectedRuntime?.upgradeTarget {
             return upgradeTarget
         }
 
@@ -49,11 +49,11 @@ struct PythonInstallView: View {
             parts.append("--default")
         }
 
-        if upgradeExisting {
+        if canUpgradeExisting && upgradeExisting {
             parts.append("--upgrade")
         }
 
-        if reinstallExisting {
+        if canReinstallExisting && reinstallExisting {
             parts.append("--reinstall")
         }
 
@@ -270,11 +270,11 @@ struct PythonInstallView: View {
     }
 
     private var primaryActionTitle: String {
-        if upgradeExisting {
+        if canUpgradeExisting && upgradeExisting {
             return "Upgrade"
         }
 
-        if reinstallExisting {
+        if canReinstallExisting && reinstallExisting {
             return "Reinstall"
         }
 
@@ -285,7 +285,7 @@ struct PythonInstallView: View {
         selectedRuntime = runtime
         query = runtime.target
 
-        if !runtime.isInstalled {
+        if !runtime.isUvManaged {
             upgradeExisting = false
             reinstallExisting = false
         }
@@ -302,8 +302,8 @@ struct PythonInstallView: View {
                 try await uvManager.installPython(
                     target: target,
                     setAsDefault: setAsDefault,
-                    upgrade: upgradeExisting,
-                    reinstall: reinstallExisting,
+                    upgrade: canUpgradeExisting && upgradeExisting,
+                    reinstall: canReinstallExisting && reinstallExisting,
                     compileBytecode: compileBytecode
                 )
             } catch {
@@ -384,7 +384,7 @@ private extension UVPythonRuntime {
             return .green
         }
 
-        if isFrameworkPython {
+        if isSystemPython {
             return .blue
         }
 

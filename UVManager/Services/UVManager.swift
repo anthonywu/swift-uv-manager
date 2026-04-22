@@ -141,15 +141,57 @@ class UVManager: ObservableObject {
         defer { isPythonLoading = false }
 
         do {
+            let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+            let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
             let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list", "--color", "never"])
-            pythonRuntimes = UVPythonRuntime.parseList(output)
+            pythonRuntimes = UVPythonRuntime.parseList(
+                output,
+                managedInstallDirectory: pythonDirectory,
+                defaultInterpreterPath: defaultInterpreterPath
+            )
         } catch {
             do {
+                let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+                let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
                 let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
-                pythonRuntimes = UVPythonRuntime.parseList(output)
+                pythonRuntimes = UVPythonRuntime.parseList(
+                    output,
+                    managedInstallDirectory: pythonDirectory,
+                    defaultInterpreterPath: defaultInterpreterPath
+                )
             } catch {
                 print("Failed to fetch Python runtimes: \(error)")
                 lastError = error.localizedDescription
+            }
+        }
+    }
+
+    private func fetchPythonInstallDirectory(uvPath: String) async -> String? {
+        do {
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir", "--color", "never"])
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            do {
+                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir"])
+                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                print("Failed to fetch Python install directory: \(error)")
+                return nil
+            }
+        }
+    }
+
+    private func fetchDefaultPythonInterpreterPath(uvPath: String) async -> String? {
+        do {
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find", "--color", "never"])
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            do {
+                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find"])
+                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                print("Failed to fetch default Python interpreter: \(error)")
+                return nil
             }
         }
     }
