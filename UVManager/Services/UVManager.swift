@@ -6,7 +6,9 @@ class UVManager: ObservableObject {
     @Published var installations: [UVInstallation] = []
     @Published var selectedInstallation: UVInstallation?
     @Published var tools: [UVTool] = []
+    @Published var pythonRuntimes: [UVPythonRuntime] = []
     @Published var isLoading = false
+    @Published var isPythonLoading = false
     @Published var toolsDirectory = ""
     @Published var lastError: String?
     
@@ -17,6 +19,7 @@ class UVManager: ObservableObject {
             await detectUVInstallations()
             await fetchToolsDirectory()
             await fetchTools()
+            await fetchPythonRuntimes()
         }
     }
     
@@ -88,6 +91,7 @@ class UVManager: ObservableObject {
             selectedInstallation = nil
             toolsDirectory = ""
             tools = []
+            pythonRuntimes = []
             lastError = "UV not found. Please install UV first."
         }
     }
@@ -124,6 +128,71 @@ class UVManager: ObservableObject {
         } catch {
             print("Failed to fetch tools: \(error)")
             lastError = error.localizedDescription
+        }
+    }
+
+    func fetchPythonRuntimes() async {
+        guard let uvPath = selectedInstallation?.path else {
+            pythonRuntimes = []
+            return
+        }
+
+        isPythonLoading = true
+        defer { isPythonLoading = false }
+
+        do {
+            let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+            let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list", "--color", "never"])
+            pythonRuntimes = UVPythonRuntime.parseList(
+                output,
+                managedInstallDirectory: pythonDirectory,
+                defaultInterpreterPath: defaultInterpreterPath
+            )
+        } catch {
+            do {
+                let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+                let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
+                pythonRuntimes = UVPythonRuntime.parseList(
+                    output,
+                    managedInstallDirectory: pythonDirectory,
+                    defaultInterpreterPath: defaultInterpreterPath
+                )
+            } catch {
+                print("Failed to fetch Python runtimes: \(error)")
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    private func fetchPythonInstallDirectory(uvPath: String) async -> String? {
+        do {
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir", "--color", "never"])
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            do {
+                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir"])
+                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                print("Failed to fetch Python install directory: \(error)")
+                return nil
+            }
+        }
+    }
+
+    private func fetchDefaultPythonInterpreterPath(uvPath: String) async -> String? {
+        do {
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find", "--color", "never"])
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            do {
+                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find"])
+                return output.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                print("Failed to fetch default Python interpreter: \(error)")
+                return nil
+            }
         }
     }
     
@@ -289,6 +358,64 @@ class UVManager: ObservableObject {
         
         _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name, "-v", "--color", "never"], streamOutput: true)
         await fetchTools()
+    }
+
+    func installPython(
+        target: String,
+        setAsDefault: Bool = false,
+        upgrade: Bool = false,
+        reinstall: Bool = false,
+        compileBytecode: Bool = false,
+        useTerminal: Bool = true
+    ) async throws {
+        guard let uvPath = selectedInstallation?.path else {
+            throw ProcessError.notFound
+        }
+
+        var args = ["python", "install"]
+
+        if setAsDefault {
+            args.append("--default")
+        }
+
+        if upgrade {
+            args.append("--upgrade")
+        }
+
+        if reinstall {
+            args.append("--reinstall")
+        }
+
+        if compileBytecode {
+            args.append("--compile-bytecode")
+        }
+
+        args.append(target)
+
+        args.append("--color")
+        args.append("never")
+
+        if useTerminal {
+            processManager.runInTerminal(uvPath, arguments: args)
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchPythonRuntimes()
+        }
+    }
+
+    func uninstallPython(target: String, useTerminal: Bool = true) async throws {
+        guard let uvPath = selectedInstallation?.path else {
+            throw ProcessError.notFound
+        }
+
+        let args = ["python", "uninstall", target, "--color", "never"]
+
+        if useTerminal {
+            processManager.runInTerminal(uvPath, arguments: args)
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchPythonRuntimes()
+        }
     }
     
     func selfUpdate() async {

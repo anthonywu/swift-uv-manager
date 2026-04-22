@@ -1,8 +1,13 @@
 import SwiftUI
 
+enum SidebarDestination: Hashable {
+    case python
+    case tool(String)
+}
+
 struct ContentView: View {
     @EnvironmentObject var uvManager: UVManager
-    @State private var selectedTool: UVTool?
+    @State private var selectedDestination: SidebarDestination?
     @State private var searchText = ""
     @State private var showInstallSheet = false
     @State private var showError = false
@@ -17,12 +22,19 @@ struct ContentView: View {
             tool.version.localizedCaseInsensitiveContains(searchText)
         }
     }
+
+    private var isRefreshingSelectedArea: Bool {
+        selectedDestination == .python ? uvManager.isPythonLoading : uvManager.isLoading
+    }
     
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             sidebar
         } detail: {
-            if let tool = selectedTool {
+            if selectedDestination == .python {
+                PythonManagerView()
+            } else if case .tool(let toolName) = selectedDestination,
+                      let tool = uvManager.tools.first(where: { $0.name == toolName }) {
                 ToolDetailView(tool: tool)
             } else {
                 EmptyStateView()
@@ -59,6 +71,7 @@ struct ContentView: View {
                         Task {
                             await uvManager.fetchToolsDirectory()
                             await uvManager.fetchTools()
+                            await uvManager.fetchPythonRuntimes()
                         }
                     }
                 } else if let installation = uvManager.selectedInstallation {
@@ -86,14 +99,18 @@ struct ContentView: View {
                 
                 Button {
                     Task {
-                        await uvManager.fetchTools()
+                        if selectedDestination == .python {
+                            await uvManager.fetchPythonRuntimes()
+                        } else {
+                            await uvManager.fetchTools()
+                        }
                     }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .disabled(uvManager.isLoading)
-                .rotationEffect(.degrees(uvManager.isLoading ? 360 : 0))
-                .animation(uvManager.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: uvManager.isLoading)
+                .disabled(isRefreshingSelectedArea)
+                .rotationEffect(.degrees(isRefreshingSelectedArea ? 360 : 0))
+                .animation(isRefreshingSelectedArea ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshingSelectedArea)
             }
         }
     }
@@ -101,10 +118,21 @@ struct ContentView: View {
     @ViewBuilder
     private var sidebar: some View {
         VStack(spacing: 0) {
-            List(selection: $selectedTool) {
+            List(selection: $selectedDestination) {
                 if uvManager.installations.isEmpty {
                     NoUVInstalledView()
                 } else {
+                    Section {
+                        Label {
+                            Text("Python Versions")
+                        } icon: {
+                            PythonLogoIcon()
+                        }
+                            .tag(SidebarDestination.python)
+                    } header: {
+                        Text("Runtime")
+                    }
+
                     if !uvManager.toolsDirectory.isEmpty {
                         Section {
                             Label {
@@ -122,7 +150,7 @@ struct ContentView: View {
                     Section {
                         ForEach(filteredTools) { tool in
                             ToolRowView(tool: tool)
-                                .tag(tool)
+                                .tag(SidebarDestination.tool(tool.name))
                         }
                     } header: {
                         HStack {
@@ -160,6 +188,31 @@ struct ContentView: View {
         }
         .navigationTitle("UV Manager")
         .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+    }
+}
+
+struct PythonLogoIcon: View {
+    var width: CGFloat = 18
+    var height: CGFloat = 18
+
+    var body: some View {
+        if let image = pythonLogoImage {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: width, height: height)
+        } else {
+            Image(systemName: "curlybraces")
+                .frame(width: width, height: height)
+        }
+    }
+
+    private var pythonLogoImage: NSImage? {
+        guard let url = Bundle.module.url(forResource: "python-logo", withExtension: "svg") else {
+            return nil
+        }
+
+        return NSImage(contentsOf: url)
     }
 }
 
