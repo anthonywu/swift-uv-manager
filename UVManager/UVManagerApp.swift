@@ -35,7 +35,7 @@ struct UVManagerApp: App {
                             .applicationName: AppConstants.appName,
                             .applicationIcon: NSImage(systemSymbolName: "shippingbox.fill", accessibilityDescription: "UV Manager Icon") as Any,
                             .applicationVersion: AppConstants.version,
-                            .credits: NSAttributedString(string: "A beautiful macOS interface for Python tool management via UV\n\n© 2026 Anthony Wu", attributes: [.font: NSFont.systemFont(ofSize: 11)])
+                            .credits: NSAttributedString(string: "A beautiful macOS interface for Python tool management via UV", attributes: [.font: NSFont.systemFont(ofSize: 11)])
                         ]
                     )
                 }

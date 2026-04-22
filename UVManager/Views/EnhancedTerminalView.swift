@@ -119,6 +119,7 @@ struct EnhancedTerminalView: View {
                     await uvManager.fetchToolsDirectory()
                 }
                 await uvManager.fetchTools()
+                await uvManager.fetchPythonRuntimes()
             }
             onDismiss?()
         }
@@ -132,4 +133,3 @@ struct EnhancedTerminalView: View {
         }
     }
 }
-

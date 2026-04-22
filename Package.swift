@@ -24,7 +24,8 @@ let package = Package(
             path: "UVManager",
             resources: [
                 .process("Assets.xcassets"),
-                .process("Preview Content")
+                .process("Preview Content"),
+                .copy("Resources/python-logo.svg")
             ]
         )
     ]
