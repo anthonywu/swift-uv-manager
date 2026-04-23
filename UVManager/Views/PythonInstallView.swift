@@ -340,11 +340,11 @@ private struct PythonRuntimeSuggestionRow: View {
             .font(.headline)
 
           if runtime.isInstalled {
-            StatusBadge(text: runtime.installSourceLabel, color: runtime.installSourceBadgeColor)
+            RuntimeInstallSourceBadge(runtime: runtime)
           }
 
           if runtime.isFreethreaded {
-            StatusBadge(text: "Free-threaded", color: .purple)
+            FreeThreadedPythonBadge()
           }
         }
 
@@ -371,19 +371,5 @@ private struct PythonRuntimeSuggestionRow: View {
       in: RoundedRectangle(cornerRadius: 6)
     )
     .contentShape(Rectangle())
-  }
-}
-
-extension UVPythonRuntime {
-  fileprivate var installSourceBadgeColor: Color {
-    if isUvManaged {
-      return .green
-    }
-
-    if isSystemPython {
-      return .blue
-    }
-
-    return .orange
   }
 }

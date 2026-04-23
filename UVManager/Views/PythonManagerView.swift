@@ -212,10 +212,10 @@ private struct PythonRuntimeRow: View {
             .fontWeight(.medium)
             .lineLimit(1)
 
-          StatusBadge(text: runtime.implementationDisplayName, color: .secondary)
+          PythonImplementationBadge(runtime: runtime)
 
           if runtime.isFreethreaded {
-            StatusBadge(text: "Free-threaded", color: .purple)
+            FreeThreadedPythonBadge()
           }
 
           if runtime.isActive {
@@ -250,8 +250,7 @@ private struct PythonRuntimeRow: View {
 
       HStack(spacing: 8) {
         if runtime.isInstalled {
-          StatusBadge(
-            text: runtime.installSourceLabel, color: runtime.installSourceBadgeColor)
+          RuntimeInstallSourceBadge(runtime: runtime)
         }
 
         if runtime.installedLocations.count > 1 {
@@ -301,19 +300,5 @@ private struct PythonRuntimeRow: View {
     }
 
     return "Uninstall \(runtime.displayName)"
-  }
-}
-
-extension UVPythonRuntime {
-  fileprivate var installSourceBadgeColor: Color {
-    if isUvManaged {
-      return .green
-    }
-
-    if isSystemPython {
-      return .blue
-    }
-
-    return .orange
   }
 }
