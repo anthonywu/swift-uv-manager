@@ -166,6 +166,19 @@ struct ContentView: View {
             }
 
             Section {
+              Button {
+                showInstallSheet = true
+              } label: {
+                Label("Install Tool", systemImage: "plus.circle")
+                  .font(.body)
+                  .fontWeight(.medium)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              .buttonStyle(.plain)
+              .foregroundStyle(Color.accentColor)
+              .help("Install a Python tool")
+              .accessibilityHint("Opens the install tool sheet")
+
               ForEach(filteredTools) { tool in
                 let destination = SidebarDestination.tool(tool.name)
                 ToolRowView(tool: tool)
@@ -178,14 +191,6 @@ struct ContentView: View {
                 Spacer()
                 Text("\(filteredTools.count)")
                   .foregroundStyle(.secondary)
-                Button {
-                  showInstallSheet = true
-                } label: {
-                  Image(systemName: "plus")
-                }
-                .buttonStyle(.plain)
-                .help("Install a Python tool")
-                .accessibilityLabel("Install Tool")
               }
             }
 
