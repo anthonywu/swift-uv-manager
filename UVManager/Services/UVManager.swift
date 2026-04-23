@@ -1,475 +1,573 @@
-import Foundation
 import Combine
+import Foundation
 
 enum UVManagerError: LocalizedError {
-    case activePythonUninstall(displayName: String, target: String)
+  case activePythonUninstall(displayName: String, target: String)
 
-    var errorDescription: String? {
-        switch self {
-        case .activePythonUninstall(let displayName, let target):
-            return "Cannot uninstall \(displayName) (\(target)) because it is the active Python. Change the active Python first to avoid removing uv tool install environments."
-        }
+  var errorDescription: String? {
+    switch self {
+    case .activePythonUninstall(let displayName, let target):
+      return
+        "Cannot uninstall \(displayName) (\(target)) because it is the active Python. Change the active Python first to avoid removing uv tool install environments."
     }
+  }
 }
 
 @MainActor
 class UVManager: ObservableObject {
-    @Published var installations: [UVInstallation] = []
-    @Published var selectedInstallation: UVInstallation?
-    @Published var tools: [UVTool] = []
-    @Published var pythonRuntimes: [UVPythonRuntime] = []
-    @Published var isLoading = false
-    @Published var isPythonLoading = false
-    @Published var toolsDirectory = ""
-    @Published var lastError: String?
-    
-    let processManager = ProcessManager()
-    
-    init() {
-        Task {
-            await detectUVInstallations()
-            await fetchToolsDirectory()
-            await fetchTools()
-            await fetchPythonRuntimes()
-        }
+  @Published var installations: [UVInstallation] = []
+  @Published var selectedInstallation: UVInstallation?
+  @Published var tools: [UVTool] = []
+  @Published var pythonRuntimes: [UVPythonRuntime] = []
+  @Published var isLoading = false
+  @Published var isPythonLoading = false
+  @Published var isCacheLoading = false
+  @Published var toolsDirectory = ""
+  @Published var cacheDirectory = ""
+  @Published var cacheSizeBytes: Int64?
+  @Published var lastError: String?
+
+  let processManager = ProcessManager()
+
+  init() {
+    Task {
+      await detectUVInstallations()
+      await fetchToolsDirectory()
+      await fetchCacheInfo()
+      await fetchTools()
+      await fetchPythonRuntimes()
     }
-    
-    func detectUVInstallations() async {
-        isLoading = true
-        defer { isLoading = false }
-        
-        let selectedPath = selectedInstallation?.path
-        var detectedInstallations: [UVInstallation] = []
-        
-        // Common UV installation locations
-        let commonPaths = [
-            NSHomeDirectory() + "/.local/bin/uv",
-            "/usr/local/bin/uv",
-            "/opt/homebrew/bin/uv",
-            "/usr/bin/uv"
-        ]
-        
-        // First check common paths
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                do {
-                    let (versionOutput, _) = try await processManager.run(path, arguments: ["--version"])
-                    if let (version, date) = UVInstallation.parse(from: versionOutput) {
-                        let installation = UVInstallation(path: path, version: version, versionDate: date)
-                        detectedInstallations.append(installation)
-                    }
-                } catch {
-                    print("Failed to get version for \(path): \(error)")
-                }
-            }
-        }
-        
-        // Also try which command as fallback
+  }
+
+  func detectUVInstallations() async {
+    isLoading = true
+    defer { isLoading = false }
+
+    let selectedPath = selectedInstallation?.path
+    var detectedInstallations: [UVInstallation] = []
+
+    // Common UV installation locations
+    let commonPaths = [
+      NSHomeDirectory() + "/.local/bin/uv",
+      "/usr/local/bin/uv",
+      "/opt/homebrew/bin/uv",
+      "/usr/bin/uv",
+    ]
+
+    // First check common paths
+    for path in commonPaths {
+      if FileManager.default.fileExists(atPath: path) {
         do {
-            let (output, _) = try await processManager.run("/usr/bin/which", arguments: ["-a", "uv"])
-            let paths = output.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines)
-            
-            for path in paths where !path.isEmpty && !commonPaths.contains(path) {
-                do {
-                    let (versionOutput, _) = try await processManager.run(path, arguments: ["--version"])
-                    if let (version, date) = UVInstallation.parse(from: versionOutput) {
-                        let installation = UVInstallation(path: path, version: version, versionDate: date)
-                        detectedInstallations.append(installation)
-                    }
-                } catch {
-                    print("Failed to get version for \(path): \(error)")
-                }
-            }
+          let (versionOutput, _) = try await processManager.run(path, arguments: ["--version"])
+          if let (version, date) = UVInstallation.parse(from: versionOutput) {
+            let installation = UVInstallation(path: path, version: version, versionDate: date)
+            detectedInstallations.append(installation)
+          }
         } catch {
-            // which command failed, but we may have found UV in common paths
-            // This is expected on some systems, ignore silently
+          print("Failed to get version for \(path): \(error)")
         }
-        
-        let refreshedInstallations = detectedInstallations.sorted { v1, v2 in
-            v1.version.compare(v2.version, options: .numeric) == .orderedDescending
-        }
-        
-        self.installations = refreshedInstallations
-        
-        if let selectedPath,
-           let refreshedSelection = refreshedInstallations.first(where: { $0.path == selectedPath }) {
-            selectedInstallation = refreshedSelection
-            lastError = nil
-        } else if let firstInstallation = refreshedInstallations.first {
-            selectedInstallation = firstInstallation
-            lastError = nil
-        } else {
-            selectedInstallation = nil
-            toolsDirectory = ""
-            tools = []
-            pythonRuntimes = []
-            lastError = "UV not found. Please install UV first."
-        }
+      }
     }
-    
-    func fetchToolsDirectory() async {
-        guard let uvPath = selectedInstallation?.path else { return }
-        
+
+    // Also try which command as fallback
+    do {
+      let (output, _) = try await processManager.run("/usr/bin/which", arguments: ["-a", "uv"])
+      let paths = output.trimmingCharacters(in: .whitespacesAndNewlines).components(
+        separatedBy: .newlines)
+
+      for path in paths where !path.isEmpty && !commonPaths.contains(path) {
         do {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["tool", "dir", "--color", "never"])
-            toolsDirectory = output.trimmingCharacters(in: .whitespacesAndNewlines)
+          let (versionOutput, _) = try await processManager.run(path, arguments: ["--version"])
+          if let (version, date) = UVInstallation.parse(from: versionOutput) {
+            let installation = UVInstallation(path: path, version: version, versionDate: date)
+            detectedInstallations.append(installation)
+          }
         } catch {
-            print("Failed to fetch tools directory: \(error)")
-            lastError = error.localizedDescription
+          print("Failed to get version for \(path): \(error)")
         }
-    }
-    
-    func fetchTools() async {
-        guard let uvPath = selectedInstallation?.path else { return }
-        
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            let (output, _) = try await processManager.run(uvPath, arguments: [
-                "tool", "list",
-                "--show-paths",
-                "--show-version-specifiers",
-                "--show-with",
-                "--show-extras",
-                "--color", "never"
-            ])
-            
-            self.tools = parseToolsList(output)
-        } catch {
-            print("Failed to fetch tools: \(error)")
-            lastError = error.localizedDescription
-        }
+      }
+    } catch {
+      // which command failed, but we may have found UV in common paths
+      // This is expected on some systems, ignore silently
     }
 
-    func fetchPythonRuntimes() async {
-        guard let uvPath = selectedInstallation?.path else {
-            pythonRuntimes = []
-            return
-        }
-
-        isPythonLoading = true
-        defer { isPythonLoading = false }
-
-        do {
-            pythonRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
-        } catch {
-            print("Failed to fetch Python runtimes: \(error)")
-            lastError = error.localizedDescription
-        }
+    let refreshedInstallations = detectedInstallations.sorted { v1, v2 in
+      v1.version.compare(v2.version, options: .numeric) == .orderedDescending
     }
 
-    private func loadPythonRuntimes(uvPath: String) async throws -> [UVPythonRuntime] {
-        let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
-        let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+    self.installations = refreshedInstallations
 
-        do {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list", "--color", "never"])
-            return UVPythonRuntime.parseList(
-                output,
-                managedInstallDirectory: pythonDirectory,
-                defaultInterpreterPath: defaultInterpreterPath
+    if let selectedPath,
+      let refreshedSelection = refreshedInstallations.first(where: { $0.path == selectedPath })
+    {
+      selectedInstallation = refreshedSelection
+      lastError = nil
+    } else if let firstInstallation = refreshedInstallations.first {
+      selectedInstallation = firstInstallation
+      lastError = nil
+    } else {
+      selectedInstallation = nil
+      toolsDirectory = ""
+      cacheDirectory = ""
+      cacheSizeBytes = nil
+      tools = []
+      pythonRuntimes = []
+      lastError = "UV not found. Please install UV first."
+    }
+  }
+
+  func fetchToolsDirectory() async {
+    guard let uvPath = selectedInstallation?.path else { return }
+
+    do {
+      let (output, _) = try await processManager.run(
+        uvPath, arguments: ["tool", "dir", "--color", "never"])
+      toolsDirectory = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    } catch {
+      print("Failed to fetch tools directory: \(error)")
+      lastError = error.localizedDescription
+    }
+  }
+
+  func fetchCacheInfo() async {
+    guard let uvPath = selectedInstallation?.path else {
+      cacheDirectory = ""
+      cacheSizeBytes = nil
+      return
+    }
+
+    isCacheLoading = true
+    defer { isCacheLoading = false }
+
+    let directory = await fetchCacheDirectory(uvPath: uvPath)
+    let sizeBytes = await fetchCacheSize(uvPath: uvPath)
+
+    cacheDirectory = directory ?? ""
+    cacheSizeBytes = sizeBytes
+  }
+
+  private func fetchCacheDirectory(uvPath: String) async -> String? {
+    do {
+      let (output, _) = try await processManager.run(uvPath, arguments: ["cache", "dir"])
+      return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    } catch {
+      print("Failed to fetch cache directory: \(error)")
+      return nil
+    }
+  }
+
+  private func fetchCacheSize(uvPath: String) async -> Int64? {
+    do {
+      let (output, error) = try await processManager.run(
+        uvPath,
+        arguments: [
+          "cache", "--preview-features", "cache-size", "size",
+        ])
+      return parseCacheSizeBytes(output + "\n" + error)
+    } catch {
+      print("Failed to fetch cache size: \(error)")
+      return nil
+    }
+  }
+
+  private func parseCacheSizeBytes(_ output: String) -> Int64? {
+    output
+      .split(whereSeparator: { $0.isWhitespace })
+      .first(where: { token in token.allSatisfy { $0.isWholeNumber } })
+      .flatMap { Int64(String($0)) }
+  }
+
+  func fetchTools() async {
+    guard let uvPath = selectedInstallation?.path else { return }
+
+    isLoading = true
+    defer { isLoading = false }
+
+    do {
+      let (output, _) = try await processManager.run(
+        uvPath,
+        arguments: [
+          "tool", "list",
+          "--show-paths",
+          "--show-version-specifiers",
+          "--show-with",
+          "--show-extras",
+          "--color", "never",
+        ])
+
+      self.tools = parseToolsList(output)
+    } catch {
+      print("Failed to fetch tools: \(error)")
+      lastError = error.localizedDescription
+    }
+  }
+
+  func fetchPythonRuntimes() async {
+    guard let uvPath = selectedInstallation?.path else {
+      pythonRuntimes = []
+      return
+    }
+
+    isPythonLoading = true
+    defer { isPythonLoading = false }
+
+    do {
+      pythonRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
+    } catch {
+      print("Failed to fetch Python runtimes: \(error)")
+      lastError = error.localizedDescription
+    }
+  }
+
+  private func loadPythonRuntimes(uvPath: String) async throws -> [UVPythonRuntime] {
+    let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+    let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+
+    do {
+      let (output, _) = try await processManager.run(
+        uvPath, arguments: ["python", "list", "--color", "never"])
+      return UVPythonRuntime.parseList(
+        output,
+        managedInstallDirectory: pythonDirectory,
+        defaultInterpreterPath: defaultInterpreterPath
+      )
+    } catch {
+      let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
+      return UVPythonRuntime.parseList(
+        output,
+        managedInstallDirectory: pythonDirectory,
+        defaultInterpreterPath: defaultInterpreterPath
+      )
+    }
+  }
+
+  private func fetchPythonInstallDirectory(uvPath: String) async -> String? {
+    do {
+      let (output, _) = try await processManager.run(
+        uvPath, arguments: ["python", "dir", "--color", "never"])
+      return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    } catch {
+      do {
+        let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir"])
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+      } catch {
+        print("Failed to fetch Python install directory: \(error)")
+        return nil
+      }
+    }
+  }
+
+  private func fetchDefaultPythonInterpreterPath(uvPath: String) async -> String? {
+    do {
+      let (output, _) = try await processManager.run(
+        uvPath, arguments: ["python", "find", "--color", "never"])
+      return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    } catch {
+      do {
+        let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find"])
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+      } catch {
+        print("Failed to fetch default Python interpreter: \(error)")
+        return nil
+      }
+    }
+  }
+
+  private func parseToolsList(_ output: String) -> [UVTool] {
+    var tools: [UVTool] = []
+    var currentTool: UVTool?
+
+    let lines = output.components(separatedBy: .newlines)
+
+    for line in lines {
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+      if trimmed.isEmpty || trimmed.hasPrefix("warning:") || trimmed.hasPrefix("hint:") {
+        continue
+      }
+
+      if line.hasPrefix("- ") {
+        if var tool = currentTool {
+          let executableLine = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
+          let pattern = #"^(.+) \((.+)\)$"#
+          if let regex = try? NSRegularExpression(pattern: pattern),
+            let match = regex.firstMatch(
+              in: executableLine, range: NSRange(executableLine.startIndex..., in: executableLine)),
+            let nameRange = Range(match.range(at: 1), in: executableLine),
+            let pathRange = Range(match.range(at: 2), in: executableLine)
+          {
+            let executable = UVTool.Executable(
+              name: String(executableLine[nameRange]),
+              path: String(executableLine[pathRange])
             )
-        } catch {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
-            return UVPythonRuntime.parseList(
-                output,
-                managedInstallDirectory: pythonDirectory,
-                defaultInterpreterPath: defaultInterpreterPath
-            )
+            tool.executables.append(executable)
+            currentTool = tool
+          }
         }
-    }
-
-    private func fetchPythonInstallDirectory(uvPath: String) async -> String? {
-        do {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir", "--color", "never"])
-            return output.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            do {
-                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "dir"])
-                return output.trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch {
-                print("Failed to fetch Python install directory: \(error)")
-                return nil
-            }
-        }
-    }
-
-    private func fetchDefaultPythonInterpreterPath(uvPath: String) async -> String? {
-        do {
-            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find", "--color", "never"])
-            return output.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            do {
-                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "find"])
-                return output.trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch {
-                print("Failed to fetch default Python interpreter: \(error)")
-                return nil
-            }
-        }
-    }
-    
-    private func parseToolsList(_ output: String) -> [UVTool] {
-        var tools: [UVTool] = []
-        var currentTool: UVTool?
-        
-        let lines = output.components(separatedBy: .newlines)
-        
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            
-            if trimmed.isEmpty || trimmed.hasPrefix("warning:") || trimmed.hasPrefix("hint:") {
-                continue
-            }
-            
-            if line.hasPrefix("- ") {
-                if var tool = currentTool {
-                    let executableLine = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                    let pattern = #"^(.+) \((.+)\)$"#
-                    if let regex = try? NSRegularExpression(pattern: pattern),
-                       let match = regex.firstMatch(in: executableLine, range: NSRange(executableLine.startIndex..., in: executableLine)),
-                       let nameRange = Range(match.range(at: 1), in: executableLine),
-                       let pathRange = Range(match.range(at: 2), in: executableLine) {
-                        let executable = UVTool.Executable(
-                            name: String(executableLine[nameRange]),
-                            path: String(executableLine[pathRange])
-                        )
-                        tool.executables.append(executable)
-                        currentTool = tool
-                    }
-                }
-            } else {
-                if let tool = currentTool {
-                    tools.append(tool)
-                }
-                
-                let pattern = #"^(\S+) v([\d.]+(?:\.post\d+)?(?:a\d+)?)"#
-                guard let regex = try? NSRegularExpression(pattern: pattern),
-                      let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                      let nameRange = Range(match.range(at: 1), in: line),
-                      let versionRange = Range(match.range(at: 2), in: line) else {
-                    continue
-                }
-                
-                let name = String(line[nameRange])
-                let version = String(line[versionRange])
-                
-                var tool = UVTool(name: name, version: version, path: "")
-                
-                // Extract path
-                let pathPattern = #"\(([^)]+)\)$"#
-                if let pathRegex = try? NSRegularExpression(pattern: pathPattern),
-                   let pathMatch = pathRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let pathRange = Range(pathMatch.range(at: 1), in: line) {
-                    tool.path = String(line[pathRange])
-                }
-                
-                // Extract version specifier
-                let requiredPattern = #"\[required: ([^\]]+)\]"#
-                if let requiredRegex = try? NSRegularExpression(pattern: requiredPattern),
-                   let requiredMatch = requiredRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let requiredRange = Range(requiredMatch.range(at: 1), in: line) {
-                    tool.versionSpecifier = String(line[requiredRange])
-                }
-                
-                // Extract extras
-                let extrasPattern = #"\[extras: ([^\]]+)\]"#
-                if let extrasRegex = try? NSRegularExpression(pattern: extrasPattern),
-                   let extrasMatch = extrasRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let extrasRange = Range(extrasMatch.range(at: 1), in: line) {
-                    tool.extras = String(line[extrasRange]).components(separatedBy: ", ")
-                }
-                
-                // Extract with packages
-                let withPattern = #"\[with: ([^\]]+)\]"#
-                if let withRegex = try? NSRegularExpression(pattern: withPattern),
-                   let withMatch = withRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let withRange = Range(withMatch.range(at: 1), in: line) {
-                    tool.withPackages = String(line[withRange]).components(separatedBy: ", ")
-                }
-                
-                currentTool = tool
-            }
-        }
-        
+      } else {
         if let tool = currentTool {
-            tools.append(tool)
+          tools.append(tool)
         }
-        
-        return tools
-    }
-    
-    func installTool(name: String, withPackages: [String] = [], force: Bool = false, useTerminal: Bool = true) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
+
+        let pattern = #"^(\S+) v([\d.]+(?:\.post\d+)?(?:a\d+)?)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+          let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+          let nameRange = Range(match.range(at: 1), in: line),
+          let versionRange = Range(match.range(at: 2), in: line)
+        else {
+          continue
         }
-        
-        var args = ["tool", "install", name]
-        
-        if !withPackages.isEmpty {
-            args.append("--with")
-            args.append(withPackages.joined(separator: ","))
+
+        let name = String(line[nameRange])
+        let version = String(line[versionRange])
+
+        var tool = UVTool(name: name, version: version, path: "")
+
+        // Extract path
+        let pathPattern = #"\(([^)]+)\)$"#
+        if let pathRegex = try? NSRegularExpression(pattern: pathPattern),
+          let pathMatch = pathRegex.firstMatch(
+            in: line, range: NSRange(line.startIndex..., in: line)),
+          let pathRange = Range(pathMatch.range(at: 1), in: line)
+        {
+          tool.path = String(line[pathRange])
         }
-        
-        if force {
-            args.append("--force")
+
+        // Extract version specifier
+        let requiredPattern = #"\[required: ([^\]]+)\]"#
+        if let requiredRegex = try? NSRegularExpression(pattern: requiredPattern),
+          let requiredMatch = requiredRegex.firstMatch(
+            in: line, range: NSRange(line.startIndex..., in: line)),
+          let requiredRange = Range(requiredMatch.range(at: 1), in: line)
+        {
+          tool.versionSpecifier = String(line[requiredRange])
         }
-        
-        // Add verbose flag to get more output
-        args.append("-v")
-        // Disable colors for better terminal compatibility
-        args.append("--color")
-        args.append("never")
-        
-        if useTerminal {
-            // Use terminal emulator for better visual output
-            processManager.runInTerminal(uvPath, arguments: args)
-            // Don't auto-dismiss - let user close the terminal when ready
-            // We'll refresh tools when the terminal is closed
-        } else {
-            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-            await fetchTools()
+
+        // Extract extras
+        let extrasPattern = #"\[extras: ([^\]]+)\]"#
+        if let extrasRegex = try? NSRegularExpression(pattern: extrasPattern),
+          let extrasMatch = extrasRegex.firstMatch(
+            in: line, range: NSRange(line.startIndex..., in: line)),
+          let extrasRange = Range(extrasMatch.range(at: 1), in: line)
+        {
+          tool.extras = String(line[extrasRange]).components(separatedBy: ", ")
         }
-    }
-    
-    func upgradeTool(name: String, useTerminal: Bool = true) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
+
+        // Extract with packages
+        let withPattern = #"\[with: ([^\]]+)\]"#
+        if let withRegex = try? NSRegularExpression(pattern: withPattern),
+          let withMatch = withRegex.firstMatch(
+            in: line, range: NSRange(line.startIndex..., in: line)),
+          let withRange = Range(withMatch.range(at: 1), in: line)
+        {
+          tool.withPackages = String(line[withRange]).components(separatedBy: ", ")
         }
-        
-        let args = ["tool", "upgrade", name, "-v", "--color", "never"]
-        
-        if useTerminal {
-            processManager.runInTerminal(uvPath, arguments: args)
-            // Don't auto-dismiss - let user close the terminal when ready
-        } else {
-            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-            await fetchTools()
-        }
-    }
-    
-    func upgradeAllTools(useTerminal: Bool = true) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
-        }
-        
-        let args = ["tool", "upgrade", "--all", "-v", "--color", "never"]
-        
-        if useTerminal {
-            processManager.runInTerminal(uvPath, arguments: args)
-            // Don't auto-dismiss - let user close the terminal when ready
-        } else {
-            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-            await fetchTools()
-        }
-    }
-    
-    func uninstallTool(name: String) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
-        }
-        
-        _ = try await processManager.run(uvPath, arguments: ["tool", "uninstall", name, "-v", "--color", "never"], streamOutput: true)
-        await fetchTools()
+
+        currentTool = tool
+      }
     }
 
-    func installPython(
-        target: String,
-        setAsDefault: Bool = false,
-        upgrade: Bool = false,
-        reinstall: Bool = false,
-        compileBytecode: Bool = false,
-        useTerminal: Bool = true
-    ) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
-        }
-
-        var args = ["python", "install"]
-
-        if setAsDefault {
-            args.append("--default")
-        }
-
-        if upgrade {
-            args.append("--upgrade")
-        }
-
-        if reinstall {
-            args.append("--reinstall")
-        }
-
-        if compileBytecode {
-            args.append("--compile-bytecode")
-        }
-
-        args.append(target)
-
-        args.append("--color")
-        args.append("never")
-
-        if useTerminal {
-            processManager.runInTerminal(uvPath, arguments: args)
-        } else {
-            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-            await fetchPythonRuntimes()
-        }
+    if let tool = currentTool {
+      tools.append(tool)
     }
 
-    func uninstallPython(target: String, useTerminal: Bool = true) async throws {
-        guard let uvPath = selectedInstallation?.path else {
-            throw ProcessError.notFound
-        }
+    return tools
+  }
 
-        if let activeRuntime = await activePythonRuntime(matchingUninstallTarget: target, uvPath: uvPath) {
-            throw UVManagerError.activePythonUninstall(
-                displayName: activeRuntime.displayName,
-                target: activeRuntime.target
-            )
-        }
-
-        let args = ["python", "uninstall", target, "--color", "never"]
-
-        if useTerminal {
-            processManager.runInTerminal(uvPath, arguments: args)
-        } else {
-            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
-            await fetchPythonRuntimes()
-        }
+  func installTool(
+    name: String, withPackages: [String] = [], force: Bool = false, useTerminal: Bool = true
+  ) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
     }
 
-    private func activePythonRuntime(matchingUninstallTarget target: String, uvPath: String) async -> UVPythonRuntime? {
-        if let runtime = pythonRuntimes.first(where: { $0.matchesUninstallTarget(target) && $0.isActive }) {
-            return runtime
-        }
+    var args = ["tool", "install", name]
 
-        do {
-            let refreshedRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
-            pythonRuntimes = refreshedRuntimes
-            return refreshedRuntimes.first { $0.matchesUninstallTarget(target) && $0.isActive }
-        } catch {
-            print("Failed to validate active Python runtime before uninstall: \(error)")
-            return nil
-        }
+    if !withPackages.isEmpty {
+      args.append("--with")
+      args.append(withPackages.joined(separator: ","))
     }
-    
-    func selfUpdate() async {
-        guard let uvPath = selectedInstallation?.path else {
-            lastError = "UV installation not found"
-            return
-        }
-        
-        // Run uv self update in terminal
-        processManager.runInTerminal(uvPath, arguments: ["self", "update", "--color", "never"])
-        
-        // After update completes, refresh UV installations
-        // This will be triggered when the terminal closes via onDisappear
+
+    if force {
+      args.append("--force")
     }
-    
-    func installUV() async throws {
-        let script = "curl -LsSf https://astral.sh/uv/install.sh | sh"
-        _ = try await processManager.run("/bin/sh", arguments: ["-c", script], streamOutput: true)
-        await detectUVInstallations()
+
+    // Add verbose flag to get more output
+    args.append("-v")
+    // Disable colors for better terminal compatibility
+    args.append("--color")
+    args.append("never")
+
+    if useTerminal {
+      // Use terminal emulator for better visual output
+      processManager.runInTerminal(uvPath, arguments: args)
+      // Don't auto-dismiss - let user close the terminal when ready
+      // We'll refresh tools when the terminal is closed
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchTools()
     }
+  }
+
+  func upgradeTool(name: String, useTerminal: Bool = true) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    let args = ["tool", "upgrade", name, "-v", "--color", "never"]
+
+    if useTerminal {
+      processManager.runInTerminal(uvPath, arguments: args)
+      // Don't auto-dismiss - let user close the terminal when ready
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchTools()
+    }
+  }
+
+  func upgradeAllTools(useTerminal: Bool = true) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    let args = ["tool", "upgrade", "--all", "-v", "--color", "never"]
+
+    if useTerminal {
+      processManager.runInTerminal(uvPath, arguments: args)
+      // Don't auto-dismiss - let user close the terminal when ready
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchTools()
+    }
+  }
+
+  func pruneCache(useTerminal: Bool = true) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    let args = ["cache", "prune"]
+
+    if useTerminal {
+      processManager.runInTerminal(uvPath, arguments: args)
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchCacheInfo()
+    }
+  }
+
+  func uninstallTool(name: String) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    _ = try await processManager.run(
+      uvPath, arguments: ["tool", "uninstall", name, "-v", "--color", "never"], streamOutput: true)
+    await fetchTools()
+  }
+
+  func installPython(
+    target: String,
+    setAsDefault: Bool = false,
+    upgrade: Bool = false,
+    reinstall: Bool = false,
+    compileBytecode: Bool = false,
+    useTerminal: Bool = true
+  ) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    var args = ["python", "install"]
+
+    if setAsDefault {
+      args.append("--default")
+    }
+
+    if upgrade {
+      args.append("--upgrade")
+    }
+
+    if reinstall {
+      args.append("--reinstall")
+    }
+
+    if compileBytecode {
+      args.append("--compile-bytecode")
+    }
+
+    args.append(target)
+
+    args.append("--color")
+    args.append("never")
+
+    if useTerminal {
+      processManager.runInTerminal(uvPath, arguments: args)
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchPythonRuntimes()
+    }
+  }
+
+  func uninstallPython(target: String, useTerminal: Bool = true) async throws {
+    guard let uvPath = selectedInstallation?.path else {
+      throw ProcessError.notFound
+    }
+
+    if let activeRuntime = await activePythonRuntime(
+      matchingUninstallTarget: target, uvPath: uvPath)
+    {
+      throw UVManagerError.activePythonUninstall(
+        displayName: activeRuntime.displayName,
+        target: activeRuntime.target
+      )
+    }
+
+    let args = ["python", "uninstall", target, "--color", "never"]
+
+    if useTerminal {
+      processManager.runInTerminal(uvPath, arguments: args)
+    } else {
+      _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+      await fetchPythonRuntimes()
+    }
+  }
+
+  private func activePythonRuntime(matchingUninstallTarget target: String, uvPath: String) async
+    -> UVPythonRuntime?
+  {
+    if let runtime = pythonRuntimes.first(where: {
+      $0.matchesUninstallTarget(target) && $0.isActive
+    }) {
+      return runtime
+    }
+
+    do {
+      let refreshedRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
+      pythonRuntimes = refreshedRuntimes
+      return refreshedRuntimes.first { $0.matchesUninstallTarget(target) && $0.isActive }
+    } catch {
+      print("Failed to validate active Python runtime before uninstall: \(error)")
+      return nil
+    }
+  }
+
+  func selfUpdate() async {
+    guard let uvPath = selectedInstallation?.path else {
+      lastError = "UV installation not found"
+      return
+    }
+
+    // Run uv self update in terminal
+    processManager.runInTerminal(uvPath, arguments: ["self", "update", "--color", "never"])
+
+    // After update completes, refresh UV installations
+    // This will be triggered when the terminal closes via onDisappear
+  }
+
+  func installUV() async throws {
+    let script = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+    _ = try await processManager.run("/bin/sh", arguments: ["-c", script], streamOutput: true)
+    await detectUVInstallations()
+  }
 }
