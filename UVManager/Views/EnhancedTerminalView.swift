@@ -120,6 +120,7 @@ struct EnhancedTerminalView: View {
                 }
                 await uvManager.fetchTools()
                 await uvManager.fetchPythonRuntimes()
+                await uvManager.fetchCacheInfo()
             }
             onDismiss?()
         }

@@ -2,6 +2,7 @@ import SwiftUI
 
 enum SidebarDestination: Hashable {
     case python
+    case systemInfo
     case tool(String)
 }
 
@@ -12,6 +13,7 @@ struct ContentView: View {
     @State private var showInstallSheet = false
     @State private var showError = false
     @State private var showUpdateTerminal = false
+    @State private var navigationKeyMonitor: Any?
     
     var filteredTools: [UVTool] {
         if searchText.isEmpty {
@@ -24,7 +26,21 @@ struct ContentView: View {
     }
 
     private var isRefreshingSelectedArea: Bool {
-        selectedDestination == .python ? uvManager.isPythonLoading : uvManager.isLoading
+        if selectedDestination == .python {
+            return uvManager.isPythonLoading
+        }
+
+        if selectedDestination == .systemInfo {
+            return uvManager.isCacheLoading
+        }
+
+        return uvManager.isLoading
+    }
+
+    private var sidebarDestinations: [SidebarDestination] {
+        guard !uvManager.installations.isEmpty else { return [] }
+
+        return [.python, .systemInfo] + filteredTools.map { .tool($0.name) }
     }
     
     var body: some View {
@@ -33,6 +49,8 @@ struct ContentView: View {
         } detail: {
             if selectedDestination == .python {
                 PythonManagerView()
+            } else if selectedDestination == .systemInfo {
+                SystemInfoView()
             } else if case .tool(let toolName) = selectedDestination,
                       let tool = uvManager.tools.first(where: { $0.name == toolName }) {
                 ToolDetailView(tool: tool)
@@ -57,6 +75,12 @@ struct ContentView: View {
         .onChange(of: uvManager.lastError) { oldValue, newValue in
             showError = newValue != nil
         }
+        .onAppear {
+            installNavigationKeyMonitor()
+        }
+        .onDisappear {
+            removeNavigationKeyMonitor()
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if uvManager.installations.count > 1 {
@@ -70,6 +94,7 @@ struct ContentView: View {
                     .onChange(of: uvManager.selectedInstallation) { oldValue, newValue in
                         Task {
                             await uvManager.fetchToolsDirectory()
+                            await uvManager.fetchCacheInfo()
                             await uvManager.fetchTools()
                             await uvManager.fetchPythonRuntimes()
                         }
@@ -101,6 +126,9 @@ struct ContentView: View {
                     Task {
                         if selectedDestination == .python {
                             await uvManager.fetchPythonRuntimes()
+                        } else if selectedDestination == .systemInfo {
+                            await uvManager.fetchToolsDirectory()
+                            await uvManager.fetchCacheInfo()
                         } else {
                             await uvManager.fetchTools()
                         }
@@ -118,57 +146,59 @@ struct ContentView: View {
     @ViewBuilder
     private var sidebar: some View {
         VStack(spacing: 0) {
-            List(selection: $selectedDestination) {
-                if uvManager.installations.isEmpty {
-                    NoUVInstalledView()
-                } else {
-                    Section {
-                        Label {
-                            Text("Python Versions")
-                        } icon: {
-                            PythonLogoIcon()
-                        }
-                            .tag(SidebarDestination.python)
-                    } header: {
-                        Text("Runtime")
-                    }
-
-                    if !uvManager.toolsDirectory.isEmpty {
+            ScrollViewReader { proxy in
+                List(selection: $selectedDestination) {
+                    if uvManager.installations.isEmpty {
+                        NoUVInstalledView()
+                    } else {
                         Section {
                             Label {
-                                Text(uvManager.toolsDirectory)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
+                                Text("Python Versions")
                             } icon: {
-                                Image(systemName: "folder")
+                                PythonLogoIcon()
+                            }
+                            .tag(SidebarDestination.python)
+                            .id(SidebarDestination.python)
+
+                            Label {
+                                Text("UV System Info")
+                            } icon: {
+                                Image(systemName: "info.circle")
+                            }
+                            .tag(SidebarDestination.systemInfo)
+                            .id(SidebarDestination.systemInfo)
+                        } header: {
+                            Text("Runtime")
+                        }
+
+                        Section {
+                            ForEach(filteredTools) { tool in
+                                let destination = SidebarDestination.tool(tool.name)
+                                ToolRowView(tool: tool)
+                                    .tag(destination)
+                                    .id(destination)
                             }
                         } header: {
-                            Text("Tools Directory")
+                            HStack {
+                                Text("Installed Tools")
+                                Spacer()
+                                Text("\(filteredTools.count)")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
-                    
-                    Section {
-                        ForEach(filteredTools) { tool in
-                            ToolRowView(tool: tool)
-                                .tag(SidebarDestination.tool(tool.name))
-                        }
-                    } header: {
-                        HStack {
-                            Text("Installed Tools")
-                            Spacer()
-                            Text("\(filteredTools.count)")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    if !filteredTools.isEmpty {
-                        Section {
-                            BulkActionsView()
+
+                        if !filteredTools.isEmpty {
+                            Section {
+                                BulkActionsView()
+                            }
                         }
                     }
                 }
+                .listStyle(.sidebar)
+                .onChange(of: selectedDestination) { _, newValue in
+                    scrollToSidebarSelection(newValue, proxy: proxy)
+                }
             }
-            .listStyle(.sidebar)
             
             Divider()
             
@@ -188,6 +218,93 @@ struct ContentView: View {
         }
         .navigationTitle("UV Manager")
         .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+    }
+
+    private func installNavigationKeyMonitor() {
+        guard navigationKeyMonitor == nil else { return }
+
+        navigationKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let direction = sidebarNavigationDirection(for: event) else {
+                return event
+            }
+
+            moveSidebarSelection(by: direction)
+            return nil
+        }
+    }
+
+    private func removeNavigationKeyMonitor() {
+        guard let navigationKeyMonitor else { return }
+
+        NSEvent.removeMonitor(navigationKeyMonitor)
+        self.navigationKeyMonitor = nil
+    }
+
+    private func scrollToSidebarSelection(_ destination: SidebarDestination?, proxy: ScrollViewProxy) {
+        guard let destination,
+              sidebarDestinations.contains(destination) else {
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            proxy.scrollTo(destination, anchor: .center)
+        }
+    }
+
+    private func sidebarNavigationDirection(for event: NSEvent) -> Int? {
+        guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+              NSApp.keyWindow?.attachedSheet == nil,
+              !textEntryIsActive else {
+            return nil
+        }
+
+        switch event.charactersIgnoringModifiers {
+        case "j":
+            return 1
+        case "k":
+            return -1
+        default:
+            return nil
+        }
+    }
+
+    private var textEntryIsActive: Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+
+        if responder is NSTextView || responder is NSTextField {
+            return true
+        }
+
+        guard let view = responder as? NSView else { return false }
+
+        if view is NSTextField || view is NSSearchField {
+            return true
+        }
+
+        var parent = view.superview
+        while let currentParent = parent {
+            if currentParent is NSTextField || currentParent is NSSearchField {
+                return true
+            }
+
+            parent = currentParent.superview
+        }
+
+        return false
+    }
+
+    private func moveSidebarSelection(by offset: Int) {
+        let destinations = sidebarDestinations
+        guard !destinations.isEmpty else { return }
+
+        guard let selectedDestination,
+              let selectedIndex = destinations.firstIndex(of: selectedDestination) else {
+            self.selectedDestination = offset > 0 ? destinations.first : destinations.last
+            return
+        }
+
+        let nextIndex = min(max(selectedIndex + offset, 0), destinations.count - 1)
+        self.selectedDestination = destinations[nextIndex]
     }
 }
 

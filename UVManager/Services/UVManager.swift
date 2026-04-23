@@ -20,7 +20,10 @@ class UVManager: ObservableObject {
     @Published var pythonRuntimes: [UVPythonRuntime] = []
     @Published var isLoading = false
     @Published var isPythonLoading = false
+    @Published var isCacheLoading = false
     @Published var toolsDirectory = ""
+    @Published var cacheDirectory = ""
+    @Published var cacheSizeBytes: Int64?
     @Published var lastError: String?
     
     let processManager = ProcessManager()
@@ -29,6 +32,7 @@ class UVManager: ObservableObject {
         Task {
             await detectUVInstallations()
             await fetchToolsDirectory()
+            await fetchCacheInfo()
             await fetchTools()
             await fetchPythonRuntimes()
         }
@@ -101,6 +105,8 @@ class UVManager: ObservableObject {
         } else {
             selectedInstallation = nil
             toolsDirectory = ""
+            cacheDirectory = ""
+            cacheSizeBytes = nil
             tools = []
             pythonRuntimes = []
             lastError = "UV not found. Please install UV first."
@@ -117,6 +123,52 @@ class UVManager: ObservableObject {
             print("Failed to fetch tools directory: \(error)")
             lastError = error.localizedDescription
         }
+    }
+
+    func fetchCacheInfo() async {
+        guard let uvPath = selectedInstallation?.path else {
+            cacheDirectory = ""
+            cacheSizeBytes = nil
+            return
+        }
+
+        isCacheLoading = true
+        defer { isCacheLoading = false }
+
+        let directory = await fetchCacheDirectory(uvPath: uvPath)
+        let sizeBytes = await fetchCacheSize(uvPath: uvPath)
+
+        cacheDirectory = directory ?? ""
+        cacheSizeBytes = sizeBytes
+    }
+
+    private func fetchCacheDirectory(uvPath: String) async -> String? {
+        do {
+            let (output, _) = try await processManager.run(uvPath, arguments: ["cache", "dir"])
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            print("Failed to fetch cache directory: \(error)")
+            return nil
+        }
+    }
+
+    private func fetchCacheSize(uvPath: String) async -> Int64? {
+        do {
+            let (output, error) = try await processManager.run(uvPath, arguments: [
+                "cache", "--preview-features", "cache-size", "size"
+            ])
+            return parseCacheSizeBytes(output + "\n" + error)
+        } catch {
+            print("Failed to fetch cache size: \(error)")
+            return nil
+        }
+    }
+
+    private func parseCacheSizeBytes(_ output: String) -> Int64? {
+        output
+            .split(whereSeparator: { $0.isWhitespace })
+            .first(where: { token in token.allSatisfy { $0.isWholeNumber } })
+            .flatMap { Int64(String($0)) }
     }
     
     func fetchTools() async {
@@ -362,6 +414,21 @@ class UVManager: ObservableObject {
         } else {
             _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
             await fetchTools()
+        }
+    }
+
+    func pruneCache(useTerminal: Bool = true) async throws {
+        guard let uvPath = selectedInstallation?.path else {
+            throw ProcessError.notFound
+        }
+
+        let args = ["cache", "prune"]
+
+        if useTerminal {
+            processManager.runInTerminal(uvPath, arguments: args)
+        } else {
+            _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
+            await fetchCacheInfo()
         }
     }
     
