@@ -5,6 +5,23 @@ dev:
 	swift build
 	swift run UVManager
 
+preview-empty-tools:
+	swift build
+	fixture_dir="$PWD/.build/fixtures/uv-empty-tools"; \
+	rm -rf "$fixture_dir"; \
+	mkdir -p "$fixture_dir/tools" "$fixture_dir/bin" "$fixture_dir/cache"; \
+	osascript -e 'tell application id "com.anthonywu.uvmanager" to quit' >/dev/null 2>&1 || true; \
+	pkill -f "$PWD/.build/.*/debug/UVManager" >/dev/null 2>&1 || true; \
+	launchctl setenv UV_TOOL_DIR "$fixture_dir/tools"; \
+	launchctl setenv UV_TOOL_BIN_DIR "$fixture_dir/bin"; \
+	launchctl setenv UV_CACHE_DIR "$fixture_dir/cache"; \
+	open -n "$PWD/.build/debug/UVManager"; \
+	sleep 1; \
+	launchctl unsetenv UV_TOOL_DIR; \
+	launchctl unsetenv UV_TOOL_BIN_DIR; \
+	launchctl unsetenv UV_CACHE_DIR; \
+	echo "Launched UV Manager with empty uv tool fixture at $fixture_dir"
+
 release:
 	./build_release.sh
 

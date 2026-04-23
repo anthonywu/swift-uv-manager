@@ -25,6 +25,7 @@ let package = Package(
             resources: [
                 .process("Assets.xcassets"),
                 .process("Preview Content"),
+                .copy("Resources/empty-state-art.png"),
                 .copy("Resources/python-logo.svg")
             ]
         )

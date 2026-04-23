@@ -221,7 +221,7 @@ struct ContentView: View {
     if let firstTool = filteredTools.first {
       selectedDestination = .tool(firstTool.name)
     } else {
-      selectedDestination = .python
+      selectedDestination = nil
     }
   }
 
@@ -346,11 +346,21 @@ struct EmptyStateView: View {
   @State private var showInstallSheet = false
 
   var body: some View {
-    ContentUnavailableView {
-      Label("No Tool Selected", systemImage: "shippingbox")
-    } description: {
-      Text("Select a tool in the sidebar to view its executables, packages, and install path.")
-    } actions: {
+    VStack(spacing: 18) {
+      EmptyStateArtwork()
+
+      VStack(spacing: 6) {
+        Text("No Tool Selected")
+          .font(.title3)
+          .fontWeight(.semibold)
+
+        Text("Select a tool in the sidebar to view its executables, packages, and install path.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 360)
+      }
+
       Button {
         showInstallSheet = true
       } label: {
@@ -363,4 +373,31 @@ struct EmptyStateView: View {
       InstallToolView()
     }
   }
+}
+
+private struct EmptyStateArtwork: View {
+  var body: some View {
+    if let image = Self.image {
+      Image(nsImage: image)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 220, height: 220)
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
+        .accessibilityHidden(true)
+    } else {
+      Image(systemName: "shippingbox")
+        .font(.system(size: 52))
+        .foregroundStyle(.quaternary)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private static let image: NSImage? = {
+    guard let url = Bundle.module.url(forResource: "empty-state-art", withExtension: "png") else {
+      return nil
+    }
+
+    return NSImage(contentsOf: url)
+  }()
 }
