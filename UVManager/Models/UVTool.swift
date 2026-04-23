@@ -1,60 +1,62 @@
 import Foundation
 
 struct UVTool: Identifiable, Hashable {
+  let id = UUID()
+  let name: String
+  let version: String
+  var path: String
+  var versionSpecifier: String?
+  var extras: [String] = []
+  var withPackages: [String] = []
+  var executables: [Executable] = []
+
+  var pypiURL: URL? {
+    URL(string: "https://pypi.org/project/\(name)/")
+  }
+
+  struct Executable: Identifiable, Hashable {
     let id = UUID()
     let name: String
-    let version: String
-    var path: String
-    var versionSpecifier: String?
-    var extras: [String] = []
-    var withPackages: [String] = []
-    var executables: [Executable] = []
-    
-    var pypiURL: URL? {
-        URL(string: "https://pypi.org/project/\(name)/")
-    }
-    
-    struct Executable: Identifiable, Hashable {
-        let id = UUID()
-        let name: String
-        let path: String
-    }
+    let path: String
+  }
 }
 
 struct UVInstallation: Identifiable, Hashable {
-    let path: String
-    let version: String
-    let versionDate: String?
-    
-    var id: String { path }
-    
-    var displayName: String {
-        "\(version) - \(path)"
+  let path: String
+  let version: String
+  let versionDate: String?
+
+  var id: String { path }
+
+  var displayName: String {
+    "\(version) - \(path)"
+  }
+
+  static func == (lhs: UVInstallation, rhs: UVInstallation) -> Bool {
+    lhs.path == rhs.path
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(path)
+  }
+
+  static func parse(from versionOutput: String) -> (version: String, date: String?)? {
+    let pattern = #"uv\s+(\d+\.\d+\.\d+)(?:\s+\(([^)]+)\))?"#
+    guard let regex = try? NSRegularExpression(pattern: pattern),
+      let match = regex.firstMatch(
+        in: versionOutput, range: NSRange(versionOutput.startIndex..., in: versionOutput)),
+      let versionRange = Range(match.range(at: 1), in: versionOutput)
+    else {
+      return nil
     }
-    
-    static func == (lhs: UVInstallation, rhs: UVInstallation) -> Bool {
-        lhs.path == rhs.path
+
+    let version = String(versionOutput[versionRange])
+    var date: String?
+
+    if let dateRange = Range(match.range(at: 2), in: versionOutput) {
+      date = String(versionOutput[dateRange])
     }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(path)
-    }
-    
-    static func parse(from versionOutput: String) -> (version: String, date: String?)? {
-        let pattern = #"uv\s+(\d+\.\d+\.\d+)(?:\s+\(([^)]+)\))?"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: versionOutput, range: NSRange(versionOutput.startIndex..., in: versionOutput)),
-              let versionRange = Range(match.range(at: 1), in: versionOutput) else {
-            return nil
-        }
-        
-        let version = String(versionOutput[versionRange])
-        var date: String? = nil
-        
-        if let dateRange = Range(match.range(at: 2), in: versionOutput) {
-            date = String(versionOutput[dateRange])
-        }
-        
-        return (version, date)
-    }
+
+    return (version, date)
+  }
 }

@@ -8,6 +8,12 @@ dev:
 release:
 	./build_release.sh
 
+format:
+	swift-format format --in-place --recursive UVManager/
+
+lint:
+	swiftlint lint --fix UVManager/
+
 release-draft version="0.4.0":
 	gh release create "v{{version}}" \
 		"release/UV Manager-{{version}}.dmg#UV Manager-{{version}}.dmg" \
