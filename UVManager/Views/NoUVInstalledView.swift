@@ -5,46 +5,36 @@ struct NoUVInstalledView: View {
   @State private var isInstalling = false
 
   var body: some View {
-    VStack(spacing: 20) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .font(.system(size: 50))
-        .foregroundStyle(.orange)
-
-      Text("UV Not Found")
-        .font(.title)
-        .fontWeight(.bold)
-
-      Text("UV is not installed on your system. UV is required to manage Python tools.")
-        .font(.body)
-        .multilineTextAlignment(.center)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal)
-
-      Button {
-        isInstalling = true
-        Task {
-          do {
-            try await uvManager.installUV()
-          } catch {
-            print("Installation failed: \(error)")
+    VStack(spacing: 16) {
+      ContentUnavailableView {
+        Label("UV Not Found", systemImage: "exclamationmark.triangle")
+      } description: {
+        Text("Install uv to manage Python tools and runtimes from UV Manager.")
+      } actions: {
+        Button {
+          isInstalling = true
+          Task {
+            do {
+              try await uvManager.installUV()
+            } catch {
+              print("Installation failed: \(error)")
+            }
+            isInstalling = false
           }
-          isInstalling = false
+        } label: {
+          Label("Install uv", systemImage: "arrow.down.circle")
+            .frame(minWidth: 120)
         }
-      } label: {
-        Label("Install UV", systemImage: "arrow.down.circle.fill")
-          .frame(width: 200)
+        .buttonStyle(.borderedProminent)
+        .disabled(isInstalling)
       }
-      .controlSize(.large)
-      .buttonStyle(.borderedProminent)
-      .disabled(isInstalling)
 
       if isInstalling {
-        ProgressView("Installing UV...")
+        ProgressView("Installing uv...")
           .progressViewStyle(.circular)
-          .scaleEffect(0.8)
       }
 
-      Link("Learn more about UV", destination: URL(string: "https://github.com/astral-sh/uv")!)
+      Link("Learn more about uv", destination: URL(string: "https://github.com/astral-sh/uv")!)
         .font(.caption)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

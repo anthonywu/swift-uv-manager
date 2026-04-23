@@ -12,8 +12,8 @@ struct ContentView: View {
   @State private var searchText = ""
   @State private var showInstallSheet = false
   @State private var showError = false
-  @State private var showUpdateTerminal = false
   @State private var navigationKeyMonitor: Any?
+  @State private var columnVisibility = NavigationSplitViewVisibility.all
 
   var filteredTools: [UVTool] {
     if searchText.isEmpty {
@@ -44,10 +44,12 @@ struct ContentView: View {
   }
 
   var body: some View {
-    NavigationSplitView(columnVisibility: .constant(.all)) {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
       sidebar
     } detail: {
-      if selectedDestination == .python {
+      if uvManager.installations.isEmpty {
+        NoUVInstalledView()
+      } else if selectedDestination == .python {
         PythonManagerView()
       } else if selectedDestination == .systemInfo {
         SystemInfoView()
@@ -64,10 +66,6 @@ struct ContentView: View {
     .sheet(isPresented: $showInstallSheet) {
       InstallToolView()
     }
-    .sheet(isPresented: $showUpdateTerminal) {
-      EnhancedTerminalView(processManager: uvManager.processManager)
-        .frame(width: 700, height: 500)
-    }
     .alert("Error", isPresented: $showError, presenting: uvManager.lastError) { _ in
       Button("OK") { uvManager.lastError = nil }
     } message: { error in
@@ -78,9 +76,16 @@ struct ContentView: View {
     }
     .onAppear {
       installNavigationKeyMonitor()
+      selectDefaultDestinationIfNeeded()
     }
     .onDisappear {
       removeNavigationKeyMonitor()
+    }
+    .onChange(of: uvManager.installations) { _, _ in
+      selectDefaultDestinationIfNeeded()
+    }
+    .onChange(of: uvManager.tools) { _, _ in
+      selectDefaultDestinationIfNeeded()
     }
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
@@ -101,27 +106,10 @@ struct ContentView: View {
             }
           }
         } else if let installation = uvManager.selectedInstallation {
-          HStack(spacing: 8) {
-            Text("UV \(installation.version)")
-              .font(.headline)
-              .foregroundStyle(.secondary)
-
-            Button("Update uv") {
-              showUpdateTerminal = true
-              Task {
-                await uvManager.selfUpdate()
-              }
-            }
-            .buttonStyle(.borderedProminent)
-          }
+          Text("UV \(installation.version)")
+            .font(.callout)
+            .foregroundStyle(.secondary)
         }
-
-        Button {
-          showInstallSheet = true
-        } label: {
-          Text("Install New Tool")
-        }
-        .buttonStyle(.borderedProminent)
 
         Button {
           Task {
@@ -137,6 +125,7 @@ struct ContentView: View {
         } label: {
           Label("Refresh", systemImage: "arrow.clockwise")
         }
+        .help("Refresh the selected view")
         .disabled(isRefreshingSelectedArea)
         .rotationEffect(.degrees(isRefreshingSelectedArea ? 360 : 0))
         .animation(
@@ -153,7 +142,8 @@ struct ContentView: View {
       ScrollViewReader { proxy in
         List(selection: $selectedDestination) {
           if uvManager.installations.isEmpty {
-            NoUVInstalledView()
+            Label("UV Not Found", systemImage: "exclamationmark.triangle")
+              .foregroundStyle(.secondary)
           } else {
             Section {
               Label {
@@ -188,6 +178,14 @@ struct ContentView: View {
                 Spacer()
                 Text("\(filteredTools.count)")
                   .foregroundStyle(.secondary)
+                Button {
+                  showInstallSheet = true
+                } label: {
+                  Image(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .help("Install a Python tool")
+                .accessibilityLabel("Install Tool")
               }
             }
 
@@ -203,25 +201,28 @@ struct ContentView: View {
           scrollToSidebarSelection(newValue, proxy: proxy)
         }
       }
-
-      Divider()
-
-      // Footer with version and GitHub attribution
-      VStack(spacing: 8) {
-        Text("\(AppConstants.appName) v\(AppConstants.version)")
-          .font(.caption2)
-          .foregroundStyle(.tertiary)
-
-        Link("Project on GitHub", destination: URL(string: AppConstants.githubURL)!)
-          .font(.caption)
-          .foregroundStyle(.blue)
-      }
-      .padding(12)
-      .frame(maxWidth: .infinity)
-      .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
     }
     .navigationTitle("UV Manager")
     .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+  }
+
+  private func selectDefaultDestinationIfNeeded() {
+    guard !uvManager.installations.isEmpty else {
+      selectedDestination = nil
+      return
+    }
+
+    if let selectedDestination,
+      sidebarDestinations.contains(selectedDestination)
+    {
+      return
+    }
+
+    if let firstTool = filteredTools.first {
+      selectedDestination = .tool(firstTool.name)
+    } else {
+      selectedDestination = .python
+    }
   }
 
   private func installNavigationKeyMonitor() {
@@ -344,61 +345,18 @@ struct PythonLogoIcon: View {
 struct EmptyStateView: View {
   @State private var showInstallSheet = false
 
-  private let koans = [
-    "The fastest resolver\nstill waits for the slowest mirror.",
-    "In the virtual environment,\nwhich Python is real?",
-    "Dependencies resolved,\nhuman conflicts remain.",
-    "Empty requirements.txt,\ninfinite possibilities.",
-    "One tool to rule them all,\nstill needs updating.",
-  ]
-
-  @State private var selectedKoanIndex: Int = Int.random(in: 0..<5)
-
   var body: some View {
-    VStack(spacing: 20) {
-      Image(systemName: "shippingbox")
-        .font(.system(size: 60))
-        .foregroundStyle(.quaternary)
-
-      Text("Select a tool from the sidebar to view details")
-        .font(.title2)
-        .foregroundStyle(.secondary)
-
-      Text("or")
-        .font(.callout)
-        .foregroundStyle(.tertiary)
-
-      Button("Install New Tool") {
+    ContentUnavailableView {
+      Label("No Tool Selected", systemImage: "shippingbox")
+    } description: {
+      Text("Select a tool in the sidebar to view its executables, packages, and install path.")
+    } actions: {
+      Button {
         showInstallSheet = true
+      } label: {
+        Label("Install Tool", systemImage: "plus")
       }
       .buttonStyle(.borderedProminent)
-      .controlSize(.large)
-
-      Spacer()
-        .frame(height: 40)
-
-      Divider()
-        .frame(width: 300)
-
-      // Zen Koan - Click to rotate
-      Button(action: {
-        selectedKoanIndex = (selectedKoanIndex + 1) % koans.count
-      }) {
-        VStack(spacing: 8) {
-          Text("\"\(koans[selectedKoanIndex])\"")
-            .font(.system(size: 14))
-            .foregroundStyle(.primary)
-            .multilineTextAlignment(.center)
-            .italic()
-            .padding(.horizontal, 30)
-
-          Text("— Zen of UV Manager —")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-        }
-      }
-      .buttonStyle(.plain)
-      .help("Click to see next koan")
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .sheet(isPresented: $showInstallSheet) {

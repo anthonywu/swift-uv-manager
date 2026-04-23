@@ -80,19 +80,20 @@ struct PythonInstallView: View {
     VStack(spacing: 0) {
       header
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-          targetPicker
-          options
-        }
-        .padding()
+      Divider()
+
+      Form {
+        targetPicker
+        options
       }
+      .formStyle(.grouped)
+      .scrollContentBackground(.hidden)
 
       Divider()
 
       actionButtons
     }
-    .frame(width: 680, height: 620)
+    .frame(width: 680, height: 600)
     .background(Color(NSColor.windowBackgroundColor))
     .sheet(isPresented: $showTerminalOutput) {
       EnhancedTerminalView(processManager: uvManager.processManager) {
@@ -130,27 +131,28 @@ struct PythonInstallView: View {
   }
 
   private var header: some View {
-    VStack(spacing: 8) {
-      Image(systemName: "arrow.down.circle.fill")
-        .font(.largeTitle)
-        .foregroundStyle(.blue)
+    HStack(spacing: 10) {
+      Image(systemName: "arrow.down.circle")
+        .font(.title3)
+        .foregroundStyle(Color.accentColor)
 
-      Text("Install Python")
-        .font(.title)
-        .fontWeight(.semibold)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Install Python")
+          .font(.headline)
 
-      Text("Select a runtime from uv python list or type a target")
-        .font(.callout)
-        .foregroundStyle(.secondary)
+        Text("Select a runtime from uv python list or type a target.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer()
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 14)
   }
 
   private var targetPicker: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Label("Python Target", systemImage: "curlybraces")
-        .font(.headline)
-
+    Section("Python Target") {
       TextField("e.g., 3.13, cpython-3.13.13-macos-aarch64-none, pypy-3.11", text: $query)
         .textFieldStyle(.roundedBorder)
         .onSubmit {
@@ -176,56 +178,55 @@ struct PythonInstallView: View {
   }
 
   private var suggestions: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text("Available Options")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+    GroupBox {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack {
+          Text("Available Options")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
 
-        Spacer()
+          Spacer()
 
-        if uvManager.isPythonLoading {
-          ProgressView()
-            .controlSize(.small)
-        }
-      }
-
-      if filteredRuntimes.isEmpty {
-        Text("No matching runtime from uv python list. The typed target can still be passed to uv.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .padding(.vertical, 8)
-      } else {
-        LazyVStack(spacing: 6) {
-          ForEach(Array(filteredRuntimes.prefix(40))) { runtime in
-            Button {
-              select(runtime)
-            } label: {
-              PythonRuntimeSuggestionRow(
-                runtime: runtime,
-                isSelected: selectedRuntime?.id == runtime.id
-              )
-            }
-            .buttonStyle(.plain)
+          if uvManager.isPythonLoading {
+            ProgressView()
+              .controlSize(.small)
           }
         }
 
-        if filteredRuntimes.count > 40 {
-          Text("Showing first 40 matches")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        if filteredRuntimes.isEmpty {
+          Text(
+            "No matching runtime from uv python list. The typed target can still be passed to uv."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .padding(.vertical, 8)
+        } else {
+          LazyVStack(spacing: 6) {
+            ForEach(Array(filteredRuntimes.prefix(40))) { runtime in
+              Button {
+                select(runtime)
+              } label: {
+                PythonRuntimeSuggestionRow(
+                  runtime: runtime,
+                  isSelected: selectedRuntime?.id == runtime.id
+                )
+              }
+              .buttonStyle(.plain)
+            }
+          }
+
+          if filteredRuntimes.count > 40 {
+            Text("Showing first 40 matches")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
         }
       }
     }
-    .padding(10)
-    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
   }
 
   private var options: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Options", systemImage: "gearshape")
-        .font(.headline)
-
+    Section("Options") {
       Toggle("Use as default Python", isOn: $setAsDefault)
 
       Toggle("Upgrade selected installed minor version to latest patch", isOn: $upgradeExisting)
@@ -268,7 +269,9 @@ struct PythonInstallView: View {
       .buttonStyle(.borderedProminent)
       .disabled(commandTarget.isEmpty || isInstalling)
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 12)
+    .background(.bar)
   }
 
   private var primaryActionTitle: String {
@@ -337,23 +340,11 @@ private struct PythonRuntimeSuggestionRow: View {
             .font(.headline)
 
           if runtime.isInstalled {
-            Text(runtime.installSourceLabel)
-              .font(.caption2)
-              .fontWeight(.medium)
-              .foregroundStyle(runtime.installSourceBadgeColor)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(runtime.installSourceBadgeColor.opacity(0.12), in: Capsule())
+            StatusBadge(text: runtime.installSourceLabel, color: runtime.installSourceBadgeColor)
           }
 
           if runtime.isFreethreaded {
-            Text("Free-threaded")
-              .font(.caption2)
-              .fontWeight(.medium)
-              .foregroundStyle(.purple)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(Color.purple.opacity(0.12), in: Capsule())
+            StatusBadge(text: "Free-threaded", color: .purple)
           }
         }
 

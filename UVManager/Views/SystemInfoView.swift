@@ -6,20 +6,20 @@ struct SystemInfoView: View {
   @State private var showTerminalOutput = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      header
+    VStack(spacing: 0) {
+      topBar
 
       Divider()
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
-          overviewSection
-          maintenanceSection
-        }
-        .padding()
+      Form {
+        directoriesSection
+        maintenanceSection
       }
+      .formStyle(.grouped)
+      .scrollContentBackground(.hidden)
     }
     .navigationTitle("UV System Info")
+    .navigationSubtitle("uv tool dir · uv cache")
     .task {
       if uvManager.toolsDirectory.isEmpty || uvManager.cacheDirectory.isEmpty
         || uvManager.cacheSizeBytes == nil
@@ -49,44 +49,31 @@ struct SystemInfoView: View {
     }
   }
 
-  private var header: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack(alignment: .center, spacing: 12) {
-        Image(systemName: "externaldrive.fill")
-          .font(.system(size: 38))
-          .foregroundStyle(.blue)
-          .frame(width: 42, height: 42)
+  private var topBar: some View {
+    HStack {
+      Text("Directories and cache maintenance for the selected uv installation.")
+        .font(.callout)
+        .foregroundStyle(.secondary)
 
-        VStack(alignment: .leading, spacing: 2) {
-          Text("UV System Info")
-            .font(.largeTitle)
-            .fontWeight(.bold)
+      Spacer()
 
-          Text("uv tool dir · uv cache")
-            .font(.system(.callout, design: .monospaced))
-            .foregroundStyle(.secondary)
+      Button {
+        Task {
+          await fetchSystemInfo()
         }
-
-        Spacer()
-
-        Button {
-          Task {
-            await fetchSystemInfo()
-          }
-        } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        .disabled(uvManager.isCacheLoading)
+      } label: {
+        Label("Refresh", systemImage: "arrow.clockwise")
       }
+      .disabled(uvManager.isCacheLoading)
+      .help("Refresh uv system information")
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 12)
+    .background(.bar)
   }
 
-  private var overviewSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Directories", systemImage: "folder")
-        .font(.headline)
-
+  private var directoriesSection: some View {
+    Section("Directories") {
       CacheInfoRow(
         title: "Tools Directory",
         value: toolsDirectoryDisplay,
@@ -108,33 +95,62 @@ struct SystemInfoView: View {
         systemImage: "chart.bar.xaxis"
       )
     }
-    .padding()
-    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
   }
 
   private var maintenanceSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Maintenance", systemImage: "wrench.and.screwdriver")
-        .font(.headline)
+    Section("Maintenance") {
+      if let installation = uvManager.selectedInstallation {
+        HStack(alignment: .firstTextBaseline) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("uv \(installation.version)")
+              .font(.body)
+              .fontWeight(.medium)
 
-      Text(
-        "Prune removes unreachable cache objects and keeps cache entries still referenced by uv."
-      )
-      .font(.callout)
-      .foregroundStyle(.secondary)
+            Text(installation.path)
+              .font(.system(.caption, design: .monospaced))
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+              .textSelection(.enabled)
+          }
+
+          Spacer()
+
+          Button {
+            showTerminalOutput = true
+            Task {
+              await uvManager.selfUpdate()
+            }
+          } label: {
+            Label("Update uv", systemImage: "arrow.up.circle")
+              .frame(minWidth: 120)
+          }
+          .buttonStyle(.bordered)
+          .disabled(uvManager.processManager.isRunning)
+        }
+      }
 
       HStack {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Cache")
+            .font(.body)
+            .fontWeight(.medium)
+
+          Text("Prune unreachable cache objects while keeping entries still referenced by uv.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
+        Spacer()
+
         Button(role: .destructive) {
           showPruneAlert = true
         } label: {
           Label("Prune Cache", systemImage: "trash")
-            .frame(minWidth: 140)
+            .frame(minWidth: 120)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(.bordered)
         .disabled(uvManager.selectedInstallation == nil || uvManager.processManager.isRunning)
-
-        Spacer()
 
         if uvManager.isCacheLoading {
           ProgressView()
@@ -143,8 +159,6 @@ struct SystemInfoView: View {
         }
       }
     }
-    .padding()
-    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
   }
 
   private var toolsDirectoryDisplay: String {
@@ -214,9 +228,9 @@ private struct CacheInfoRow: View {
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
       Image(systemName: systemImage)
-        .font(.title3)
+        .font(.body)
         .foregroundStyle(.secondary)
-        .frame(width: 24)
+        .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
@@ -240,8 +254,7 @@ private struct CacheInfoRow: View {
 
       Spacer(minLength: 12)
     }
-    .padding(10)
-    .background(.tertiary.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
+    .padding(.vertical, 4)
   }
 
   private var isDirectoryRow: Bool {

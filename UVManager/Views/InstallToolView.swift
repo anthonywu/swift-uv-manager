@@ -15,20 +15,21 @@ struct InstallToolView: View {
     VStack(spacing: 0) {
       headerSection
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
-          packageSection
-          additionalPackagesSection
-          optionsSection
-        }
-        .padding()
+      Divider()
+
+      Form {
+        packageSection
+        additionalPackagesSection
+        optionsSection
       }
+      .formStyle(.grouped)
+      .scrollContentBackground(.hidden)
 
       Divider()
 
       actionButtons
     }
-    .frame(width: 600, height: 500)
+    .frame(width: 560, height: 440)
     .background(Color(NSColor.windowBackgroundColor))
     .sheet(isPresented: $showTerminalOutput) {
       EnhancedTerminalView(processManager: uvManager.processManager) {
@@ -40,29 +41,30 @@ struct InstallToolView: View {
   }
 
   private var headerSection: some View {
-    VStack(spacing: 8) {
-      Image(systemName: "plus.circle.fill")
-        .font(.largeTitle)
-        .foregroundStyle(.blue)
+    HStack(spacing: 10) {
+      Image(systemName: "plus.circle")
+        .font(.title3)
+        .foregroundStyle(Color.accentColor)
 
-      Text("Install Python Tool")
-        .font(.title)
-        .fontWeight(.semibold)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Install Python Tool")
+          .font(.headline)
 
-      Text("Install a tool from PyPI with optional dependencies")
-        .font(.callout)
-        .foregroundStyle(.secondary)
+        Text("Install a tool from PyPI with optional dependencies.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Spacer()
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 14)
   }
 
   private var packageSection: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Label("Package Name", systemImage: "shippingbox")
-        .font(.headline)
-
+    Section("Package") {
       HStack {
-        TextField("e.g., ruff, black, pytest", text: $packageName)
+        TextField("e.g. ruff, black, pytest", text: $packageName)
           .textFieldStyle(.roundedBorder)
           .accessibilityLabel("Package name")
           .accessibilityHint("Enter the exact package name as it appears on PyPI")
@@ -76,19 +78,16 @@ struct InstallToolView: View {
         }
       }
 
-      Text("Enter the exact package name as it appears on PyPI")
-        .font(.caption)
+      Text("Enter the exact package name as it appears on PyPI.")
+        .font(.callout)
         .foregroundStyle(.secondary)
     }
   }
 
   private var additionalPackagesSection: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Label("Additional Packages (Optional)", systemImage: "link")
-        .font(.headline)
-
+    Section("Additional Packages") {
       HStack {
-        TextField("e.g., pandas, numpy", text: $newPackage)
+        TextField("e.g. pandas, numpy", text: $newPackage)
           .textFieldStyle(.roundedBorder)
           .onSubmit {
             addPackage()
@@ -125,17 +124,14 @@ struct InstallToolView: View {
         }
       }
 
-      Text("These packages will be installed in the same virtual environment")
+      Text("These packages will be installed in the same virtual environment.")
         .font(.caption)
         .foregroundStyle(.secondary)
     }
   }
 
   private var optionsSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Label("Options", systemImage: "gearshape")
-        .font(.headline)
-
+    Section("Options") {
       Toggle(isOn: $forceInstall) {
         VStack(alignment: .leading, spacing: 2) {
           Text("Force Install")
@@ -168,7 +164,9 @@ struct InstallToolView: View {
       .buttonStyle(.borderedProminent)
       .disabled(packageName.isEmpty || isInstalling)
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 12)
+    .background(.bar)
   }
 
   private func addPackage() {

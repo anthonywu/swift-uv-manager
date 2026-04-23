@@ -22,14 +22,12 @@ struct ToolRowView: View {
       VStack(alignment: .leading, spacing: 4) {
         HStack {
           Text(tool.name)
-            .font(.headline)
+            .font(.body)
+            .fontWeight(.medium)
 
           Text("v\(tool.version)")
             .font(.caption)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.quaternary, in: Capsule())
         }
 
         if !tool.executables.isEmpty {
@@ -43,13 +41,13 @@ struct ToolRowView: View {
           if !tool.extras.isEmpty {
             Label("\(tool.extras.count) extras", systemImage: "puzzlepiece")
               .font(.caption2)
-              .foregroundStyle(.blue)
+              .foregroundStyle(.secondary)
           }
 
           if !tool.withPackages.isEmpty {
             Label("\(tool.withPackages.count) deps", systemImage: "link")
               .font(.caption2)
-              .foregroundStyle(.green)
+              .foregroundStyle(.secondary)
           }
 
           if tool.versionSpecifier != nil {

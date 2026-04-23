@@ -7,13 +7,14 @@ struct BulkActionsView: View {
   @State private var showTerminalOutput = false
 
   var body: some View {
-    HStack(spacing: 16) {
+    HStack(spacing: 8) {
       Button {
         showUpgradeAllAlert = true
       } label: {
-        Label("Upgrade All Tools", systemImage: "arrow.up.circle.fill")
+        Label("Upgrade All", systemImage: "arrow.up.circle")
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.bordered)
+      .controlSize(.small)
       .disabled(uvManager.tools.isEmpty || isPerformingAction)
 
       Spacer()
@@ -24,8 +25,7 @@ struct BulkActionsView: View {
           .scaleEffect(0.8)
       }
     }
-    .padding()
-    .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    .padding(.vertical, 4)
     .alert("Upgrade All Tools", isPresented: $showUpgradeAllAlert) {
       Button("Cancel", role: .cancel) {}
       Button("Upgrade All", role: .destructive) {

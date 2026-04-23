@@ -28,8 +28,8 @@ struct PythonManagerView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      header
+    VStack(spacing: 0) {
+      filterBar
 
       Divider()
 
@@ -37,40 +37,39 @@ struct PythonManagerView: View {
         ProgressView("Loading Python versions...")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ScrollView {
-          VStack(alignment: .leading, spacing: 24) {
-            runtimeSection(
-              title: "System Python",
-              runtimes: systemRuntimes,
-              emptyMessage: searchText.isEmpty
-                ? "No system Python installs found." : "No matching system Python installs.",
-              footer:
-                "These Python installs are outside uv's managed runtime directory and should not be managed by uv."
-            )
+        List {
+          runtimeSection(
+            title: "System Python",
+            runtimes: systemRuntimes,
+            emptyMessage: searchText.isEmpty
+              ? "No system Python installs found." : "No matching system Python installs.",
+            footer:
+              "These installs are outside uv's managed runtime directory and are shown for context."
+          )
 
-            runtimeSection(
-              title: "Installed",
-              runtimes: installedRuntimes,
-              emptyMessage: "No uv-managed Python versions found."
-            )
+          runtimeSection(
+            title: "Installed",
+            runtimes: installedRuntimes,
+            emptyMessage: "No uv-managed Python versions found."
+          )
 
-            runtimeSection(
-              title: "Available to Download",
-              runtimes: downloadableRuntimes,
-              emptyMessage: searchText.isEmpty
-                ? "No downloadable Python versions found."
-                : "No matching downloadable Python versions.",
-              onInstall: { runtime in
-                runtimeToInstall = runtime
-                showInstallSheet = true
-              }
-            )
-          }
-          .padding()
+          runtimeSection(
+            title: "Available to Download",
+            runtimes: downloadableRuntimes,
+            emptyMessage: searchText.isEmpty
+              ? "No downloadable Python versions found."
+              : "No matching downloadable Python versions.",
+            onInstall: { runtime in
+              runtimeToInstall = runtime
+              showInstallSheet = true
+            }
+          )
         }
+        .listStyle(.inset(alternatesRowBackgrounds: true))
       }
     }
     .navigationTitle("Python Versions")
+    .navigationSubtitle("uv python list")
     .sheet(isPresented: $showInstallSheet) {
       PythonInstallView(initialRuntime: runtimeToInstall)
     }
@@ -112,41 +111,30 @@ struct PythonManagerView: View {
     }
   }
 
-  private var header: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack(alignment: .center, spacing: 12) {
-        PythonLogoIcon(width: 42, height: 42)
-
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Python Versions")
-            .font(.largeTitle)
-            .fontWeight(.bold)
-
-          Text("uv python list")
-            .font(.system(.callout, design: .monospaced))
-            .foregroundStyle(.secondary)
-        }
-
-        Spacer()
-
-        Button {
-          Task {
-            await uvManager.fetchPythonRuntimes()
-          }
-        } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        .disabled(uvManager.isPythonLoading)
-
-      }
-
+  private var filterBar: some View {
+    HStack(spacing: 12) {
       TextField("Filter by version, implementation, target, or path", text: $searchText)
         .textFieldStyle(.roundedBorder)
         .frame(maxWidth: 480)
+
+      Spacer()
+
+      Button {
+        Task {
+          await uvManager.fetchPythonRuntimes()
+        }
+      } label: {
+        Label("Refresh", systemImage: "arrow.clockwise")
+      }
+      .disabled(uvManager.isPythonLoading)
+      .help("Refresh Python versions")
     }
-    .padding()
+    .padding(.horizontal, 20)
+    .padding(.vertical, 12)
+    .background(.bar)
   }
 
+  @ViewBuilder
   private func runtimeSection(
     title: String,
     runtimes: [UVPythonRuntime],
@@ -154,10 +142,24 @@ struct PythonManagerView: View {
     footer: String? = nil,
     onInstall: ((UVPythonRuntime) -> Void)? = nil
   ) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
+    Section {
+      if runtimes.isEmpty {
+        Text(emptyMessage)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .padding(.vertical, 8)
+      } else {
+        ForEach(runtimes) { runtime in
+          PythonRuntimeRow(runtime: runtime) {
+            runtimeToUninstall = runtime
+          } onInstall: {
+            onInstall?(runtime)
+          }
+        }
+      }
+    } header: {
       HStack {
         Text(title)
-          .font(.headline)
 
         Text("\(runtimes.count)")
           .font(.caption)
@@ -166,29 +168,9 @@ struct PythonManagerView: View {
           .padding(.vertical, 2)
           .background(.quaternary, in: Capsule())
       }
-
-      if runtimes.isEmpty {
-        Text(emptyMessage)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.vertical, 10)
-      } else {
-        LazyVStack(spacing: 8) {
-          ForEach(runtimes) { runtime in
-            PythonRuntimeRow(runtime: runtime) {
-              runtimeToUninstall = runtime
-            } onInstall: {
-              onInstall?(runtime)
-            }
-          }
-        }
-      }
-
+    } footer: {
       if let footer, !runtimes.isEmpty {
         Text(footer)
-          .font(.caption)
-          .foregroundStyle(.secondary)
       }
     }
   }
@@ -217,30 +199,32 @@ private struct PythonRuntimeRow: View {
   let onInstall: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .center, spacing: 12) {
       Image(systemName: runtime.isInstalled ? "checkmark.circle.fill" : "arrow.down.circle")
-        .font(.title3)
-        .foregroundStyle(runtime.isInstalled ? .green : .blue)
-        .frame(width: 24)
+        .font(.body)
+        .foregroundStyle(runtime.isInstalled ? Color.green : Color.accentColor)
+        .frame(width: 20)
 
       VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 8) {
           Text(runtime.displayName)
-            .font(.headline)
+            .font(.body)
+            .fontWeight(.medium)
+            .lineLimit(1)
 
-          PythonRuntimeBadge(text: runtime.implementationDisplayName, color: .blue)
+          StatusBadge(text: runtime.implementationDisplayName, color: .secondary)
 
           if runtime.isFreethreaded {
-            PythonRuntimeBadge(text: "Free-threaded", color: .purple)
+            StatusBadge(text: "Free-threaded", color: .purple)
           }
 
           if runtime.isActive {
-            PythonRuntimeBadge(text: "Active", color: .green)
+            StatusBadge(text: "Active", color: .green)
           }
 
           if runtime.isEndOfLife {
             Link(destination: URL(string: "https://devguide.python.org/versions/")!) {
-              PythonRuntimeBadge(text: "End-of-Life", color: .red)
+              StatusBadge(text: "End-of-Life", color: .red)
             }
             .buttonStyle(.plain)
             .help("View Python version status")
@@ -264,9 +248,9 @@ private struct PythonRuntimeRow: View {
 
       Spacer(minLength: 12)
 
-      VStack(alignment: .trailing, spacing: 6) {
+      HStack(spacing: 8) {
         if runtime.isInstalled {
-          PythonRuntimeBadge(
+          StatusBadge(
             text: runtime.installSourceLabel, color: runtime.installSourceBadgeColor)
         }
 
@@ -296,8 +280,7 @@ private struct PythonRuntimeRow: View {
         }
       }
     }
-    .padding(12)
-    .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+    .padding(.vertical, 4)
     .accessibilityElement(children: .combine)
   }
 
@@ -318,21 +301,6 @@ private struct PythonRuntimeRow: View {
     }
 
     return "Uninstall \(runtime.displayName)"
-  }
-}
-
-private struct PythonRuntimeBadge: View {
-  let text: String
-  let color: Color
-
-  var body: some View {
-    Text(text)
-      .font(.caption2)
-      .fontWeight(.medium)
-      .foregroundStyle(color)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 3)
-      .background(color.opacity(0.12), in: Capsule())
   }
 }
 
