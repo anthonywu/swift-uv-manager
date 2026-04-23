@@ -11,8 +11,8 @@ struct PythonManagerView: View {
     private var installedRuntimes: [UVPythonRuntime] {
         filtered(uvManager.pythonRuntimes.filter { $0.isInstalled && $0.isUvManaged })
             .sorted { lhs, rhs in
-                if lhs.isDefault != rhs.isDefault {
-                    return lhs.isDefault
+                if lhs.isActive != rhs.isActive {
+                    return lhs.isActive
                 }
 
                 return lhs.version.compare(rhs.version, options: .numeric) == .orderedDescending
@@ -83,10 +83,10 @@ struct PythonManagerView: View {
             Button("Cancel", role: .cancel) { }
             Button("Uninstall", role: .destructive) {
                 guard let runtime = runtimeToUninstall else { return }
-                showTerminalOutput = true
                 Task {
                     do {
                         try await uvManager.uninstallPython(target: runtime.target)
+                        showTerminalOutput = true
                     } catch {
                         await MainActor.run {
                             uvManager.lastError = error.localizedDescription
@@ -228,8 +228,8 @@ private struct PythonRuntimeRow: View {
                         PythonRuntimeBadge(text: "Free-threaded", color: .purple)
                     }
 
-                    if runtime.isDefault {
-                        PythonRuntimeBadge(text: "Default", color: .green)
+                    if runtime.isActive {
+                        PythonRuntimeBadge(text: "Active", color: .green)
                     }
 
                     if runtime.isEndOfLife {
@@ -275,7 +275,8 @@ private struct PythonRuntimeRow: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .help("Uninstall \(runtime.displayName)")
+                    .disabled(runtime.isActive)
+                    .help(uninstallHelpText)
                 }
 
                 if !runtime.isInstalled && runtime.isDownloadAvailable {
@@ -298,6 +299,14 @@ private struct PythonRuntimeRow: View {
             return "\(runtime.installedEntries.first(where: { $0.location == location })?.executablePath ?? location) -> \(aliasTarget)"
         }
         return location
+    }
+
+    private var uninstallHelpText: String {
+        if runtime.isActive {
+            return "Cannot uninstall the active Python because uv tool install environments may depend on it."
+        }
+
+        return "Uninstall \(runtime.displayName)"
     }
 }
 

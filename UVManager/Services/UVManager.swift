@@ -1,6 +1,17 @@
 import Foundation
 import Combine
 
+enum UVManagerError: LocalizedError {
+    case activePythonUninstall(displayName: String, target: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .activePythonUninstall(let displayName, let target):
+            return "Cannot uninstall \(displayName) (\(target)) because it is the active Python. Change the active Python first to avoid removing uv tool install environments."
+        }
+    }
+}
+
 @MainActor
 class UVManager: ObservableObject {
     @Published var installations: [UVInstallation] = []
@@ -141,28 +152,31 @@ class UVManager: ObservableObject {
         defer { isPythonLoading = false }
 
         do {
-            let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
-            let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+            pythonRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
+        } catch {
+            print("Failed to fetch Python runtimes: \(error)")
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func loadPythonRuntimes(uvPath: String) async throws -> [UVPythonRuntime] {
+        let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
+        let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
+
+        do {
             let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list", "--color", "never"])
-            pythonRuntimes = UVPythonRuntime.parseList(
+            return UVPythonRuntime.parseList(
                 output,
                 managedInstallDirectory: pythonDirectory,
                 defaultInterpreterPath: defaultInterpreterPath
             )
         } catch {
-            do {
-                let pythonDirectory = await fetchPythonInstallDirectory(uvPath: uvPath)
-                let defaultInterpreterPath = await fetchDefaultPythonInterpreterPath(uvPath: uvPath)
-                let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
-                pythonRuntimes = UVPythonRuntime.parseList(
-                    output,
-                    managedInstallDirectory: pythonDirectory,
-                    defaultInterpreterPath: defaultInterpreterPath
-                )
-            } catch {
-                print("Failed to fetch Python runtimes: \(error)")
-                lastError = error.localizedDescription
-            }
+            let (output, _) = try await processManager.run(uvPath, arguments: ["python", "list"])
+            return UVPythonRuntime.parseList(
+                output,
+                managedInstallDirectory: pythonDirectory,
+                defaultInterpreterPath: defaultInterpreterPath
+            )
         }
     }
 
@@ -408,6 +422,13 @@ class UVManager: ObservableObject {
             throw ProcessError.notFound
         }
 
+        if let activeRuntime = await activePythonRuntime(matchingUninstallTarget: target, uvPath: uvPath) {
+            throw UVManagerError.activePythonUninstall(
+                displayName: activeRuntime.displayName,
+                target: activeRuntime.target
+            )
+        }
+
         let args = ["python", "uninstall", target, "--color", "never"]
 
         if useTerminal {
@@ -415,6 +436,21 @@ class UVManager: ObservableObject {
         } else {
             _ = try await processManager.run(uvPath, arguments: args, streamOutput: true)
             await fetchPythonRuntimes()
+        }
+    }
+
+    private func activePythonRuntime(matchingUninstallTarget target: String, uvPath: String) async -> UVPythonRuntime? {
+        if let runtime = pythonRuntimes.first(where: { $0.matchesUninstallTarget(target) && $0.isActive }) {
+            return runtime
+        }
+
+        do {
+            let refreshedRuntimes = try await loadPythonRuntimes(uvPath: uvPath)
+            pythonRuntimes = refreshedRuntimes
+            return refreshedRuntimes.first { $0.matchesUninstallTarget(target) && $0.isActive }
+        } catch {
+            print("Failed to validate active Python runtime before uninstall: \(error)")
+            return nil
         }
     }
     

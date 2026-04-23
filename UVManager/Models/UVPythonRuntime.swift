@@ -46,11 +46,15 @@ struct UVPythonRuntime: Identifiable, Hashable {
         !installedEntries.isEmpty
     }
 
-    var isDefault: Bool {
+    var isActive: Bool {
         guard let defaultInterpreterPath else { return false }
         return installedEntries.contains { entry in
-            entry.executablePath.expandedHomePath == defaultInterpreterPath
+            entry.executablePath.isSameFileSystemPath(as: defaultInterpreterPath)
         }
+    }
+
+    var isDefault: Bool {
+        isActive
     }
 
     var isUvManaged: Bool {
@@ -103,6 +107,22 @@ struct UVPythonRuntime: Identifiable, Hashable {
         default:
             return "\(implementation.lowercased())@\(minorVersion)"
         }
+    }
+
+    func matchesUninstallTarget(_ requestedTarget: String) -> Bool {
+        let normalizedTarget = requestedTarget.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var candidates = [target, version]
+
+        if let minorVersion {
+            candidates.append(minorVersion)
+            candidates.append("\(implementation.lowercased())@\(minorVersion)")
+        }
+
+        if let upgradeTarget {
+            candidates.append(upgradeTarget)
+        }
+
+        return candidates.contains { $0.lowercased() == normalizedTarget }
     }
 
     var isEndOfLife: Bool {
@@ -218,5 +238,16 @@ private extension String {
         let normalizedSelf = expandedHomePath
         let normalizedPrefix = prefix.expandedHomePath
         return normalizedSelf == normalizedPrefix || normalizedSelf.hasPrefix(normalizedPrefix + "/")
+    }
+
+    var resolvedFileSystemPath: String {
+        URL(fileURLWithPath: expandedHomePath)
+            .resolvingSymlinksInPath()
+            .path
+            .trimmingTrailingSlashes()
+    }
+
+    func isSameFileSystemPath(as otherPath: String) -> Bool {
+        resolvedFileSystemPath == otherPath.resolvedFileSystemPath
     }
 }
