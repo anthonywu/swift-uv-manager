@@ -10,13 +10,29 @@ Alpha release. It should mostly work and do no harm, however the community is in
 
 ## Download
 
-In this repo's [Releases](https://github.com/anthonywu/swift-uv-manager/releases) page I will post notarized direct-download builds as a `.zip` artifact.
+In this repo's [Releases](https://github.com/anthonywu/swift-uv-manager/releases) page I will post notarized direct-download builds as `.zip` and `.dmg` artifacts.
 
 Unzip the download and move `UV Manager.app` to your `/Applications` folder. The release process below signs the app with a `Developer ID Application` certificate, submits it for notarization, and staples the notarization ticket so users do not need to disable Gatekeeper or strip the quarantine attribute manually.
+
+### Homebrew
+
+UV Manager can also be installed with Homebrew Cask from this repository as a tap:
+
+```bash
+brew tap anthonywu/swift-uv-manager https://github.com/anthonywu/swift-uv-manager
+brew install --cask anthonywu/swift-uv-manager/uv-manager
+```
+
+The cask installs `UV Manager.app` into `/Applications`. To upgrade after a new release:
+
+```bash
+brew upgrade --cask anthonywu/swift-uv-manager/uv-manager
+```
 
 ## What Users Should Expect
 
 - Download `UV Manager.zip`, unzip it, move `UV Manager.app` to `/Applications`, and open it normally.
+- Or install with Homebrew Cask using the tap above.
 - macOS may still show the standard first-launch confirmation for apps downloaded from the internet. This is expected.
 - Users should not need to disable Gatekeeper, remove the quarantine attribute manually, or use Terminal just to launch the app.
 - On first launch, the app may take a moment while it checks for an existing `uv` installation.
@@ -122,6 +138,13 @@ Artifacts are written to:
 
 - `release/UV Manager.app`
 - `release/UV Manager.zip`
+- `release/UV Manager-$VERSION.dmg`
+
+When publishing a new release, update `Casks/uv-manager.rb` with the new `version` and DMG `sha256`:
+
+```bash
+shasum -a 256 "release/UV Manager-$VERSION.dmg"
+```
 
 ## Architecture
 
